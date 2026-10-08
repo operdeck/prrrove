@@ -1,6 +1,6 @@
 # Prrrdoku 2 - "Groter park, drie katten"  (9x9, seven regions)
 #
-# Board transcribed from the figure in Prrrdoku.docx; colours matched to names
+# Board transcribed from the figure in Prrrdoku 3.docx; colours matched to names
 # via the document's legend table. Cross-checked against the solution's
 # candidate lists: klimwand's neighbours are r1c2, r2c1, r2c3, r3c2; vuurtje's
 # r5c2, r6c1, r6c3, r7c2; bank's r5c6, r6c5, r6c7, r7c6; glijbaan's r7c4,
@@ -45,7 +45,7 @@ Anna
 Pip
 Tjitske
 Vladimir
-Mauw
+Mao
 Luna
 
 # Clues 1-12 from the document. Clue 13 ("only one other in Vladimir's
@@ -62,4 +62,4 @@ left_of Jos Otto
 next_to Luna glijbaan
 alone Luna
 within Luna Tim 6
-apart Luna Mauw
+apart Luna Mao

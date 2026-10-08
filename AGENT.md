@@ -109,7 +109,7 @@ Numbers from actual runs, not estimates:
 | `sudoku_what_if.txt` | solved, 66 iterations | `single` 55, `subsumption` 6, `cover2` 2, `what_if` 2 |
 | `prrrdoku1.txt` | solved, 88 iterations | `relations` 79, `single` 7, `subsumption` 1 |
 | `prrrdoku2.txt` | solved, 162 iterations | `relations` 149, `single` 9, `cover3` 1, `cover2` 1, `what_if` 1 |
-| `prrrdoku3.txt` | solved, 178 iterations | `relations` 167, `single` 9, `subsumption` 1 |
+| `prrrdoku3.txt` | solved, 147 iterations | `relations` 121, `what_if` 12, `single` 9, `subsumption` 4 |
 
 The graded Sudokus were generated (random minimal puzzles, uniqueness checked
 by backtracking) and picked because each needs its rule: the tests cut the
@@ -117,18 +117,24 @@ ladder just before it and assert the puzzle stalls. A single firing can
 unlock a whole puzzle, so the counts are small.
 
 On Prrrdoku 2, `cover3` is the document's step "Tim, Jos and Pip fill rows
-1-3, so Anna is outside them", and `cover2` is "Pip and Mauw fill columns 8
+1-3, so Anna is outside them", and `cover2` is "Pip and Mao fill columns 8
 and 9". The document then splits on Otto's square; `what_if` instead rules
 out Tim on r2c3 (Jos is left with nowhere to go). Different route, same
 answer.
 
+Prrrdoku 3 leans on `what_if` hardest (12 firings). The document's own
+solution has a matching step, "werk die door en er valt een rij domino's
+om" - a chain of consequences rather than a single named pattern. Chains
+would explain that more like a person does.
+
 ## Known gaps
 
-- Prrrdoku boards are **images** in `Prrrdoku.docx` — extract from
-  `word/media/*.png` and read them; the tables in that file are colour
-  legends, useful for matching colours to region names (read `w:fill`).
-  Always cross-check a transcription against the candidate lists in the
-  document's worked solution before trusting it.
+- Prrrdoku boards are **images** in `Prrrdoku 3.docx` (the current version;
+  the older `Prrrdoku.docx` has a different puzzle 3 and calls Mao "Mauw").
+  Extract from `word/media/*.png` and read them; the tables in that file are
+  colour legends, useful for matching colours to region names (read
+  `w:fill`). Always cross-check a transcription against the candidate lists
+  in the document's worked solution before trusting it.
 - "Only Luna may stand in the water" is a board rule, written out as one
   `outside` clue per other person in `prrrdoku3.txt`.
 - `relations` is plain arc consistency and re-scans every relation from

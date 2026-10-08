@@ -58,10 +58,10 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
     if unknown:
         raise ValueError(f"Grid uses region ids with no name: {sorted(unknown)}")
 
-    objects = {}
-    for line in section.get("Objects", []):
-        name, _, where = line.partition(":")
-        objects[name.strip()] = parse_square(where)
+    objects = _placements(section.get("Objects", []))
+    furniture = _placements(section.get("Furniture", []))
+    if overlap := _overlap(objects, furniture):
+        raise ValueError(f"furniture placed on an object at {sorted(overlap)}")
 
     people = list(section["People"])
 
@@ -75,6 +75,26 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
         kind, *args = line.split()
         clues.append((kind, args))
 
-    board = Board(size, grid, region_names, objects, people, groups)
+    board = Board(size, grid, region_names, objects, people, groups, furniture)
     board.region_ids(groups)  # fails now, not mid-solve, if a group names an unknown region
     return board, clues
+
+
+def _placements(lines: list[str]) -> dict[str, list[Square]]:
+    """'koffer: r1c5 r4c7' lines -> {'koffer': [Square(0, 4), Square(3, 6)]}."""
+    placed: dict[str, list[Square]] = {}
+    for line in lines:
+        name, _, where = line.partition(":")
+        placed.setdefault(name.strip(), []).extend(parse_square(t) for t in where.split())
+    return placed
+
+
+def _overlap(*layers: dict[str, list[Square]]) -> set[Square]:
+    """Squares claimed by more than one layer."""
+    seen: set[Square] = set()
+    overlap: set[Square] = set()
+    for layer in layers:
+        squares = {sq for group in layer.values() for sq in group}
+        overlap |= seen & squares
+        seen |= squares
+    return overlap

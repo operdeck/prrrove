@@ -20,7 +20,7 @@ Three ingredients, defined in `src/csp/core.py`:
 - **Literals** — atomic choices. `r3c4=7` for Sudoku, `Tim=r1c1` for Murdoku.
 - **Constraints** — a set of literals tagged `EXACTLY_ONE` or `AT_MOST_ONE`.
 - **Relations** — a predicate over two or more variables' choices, for clues
-  like "Jos is somewhere left of Otto" or "Luna is furthest from Mauw".
+  like "Jos is somewhere left of Otto" or "Luna is furthest from Mao".
 
 A *variable* is just a constraint flagged as owning a whole domain, so
 `model.chosen("Tim")` can report what Tim settled on.
@@ -94,7 +94,7 @@ Correctness is checked against ground truth, not self-consistency:
   also show its named pattern in the log, and must stall when the ladder is
   cut just before its rule, so the example really exercises that rung.
 - All three Prrrdokus are checked against the published solutions and the
-  puzzle's question (who is in Vladimir's region) in `Prrrdoku.docx`, and the
+  puzzle's question (who is in Vladimir's region) in `Prrrdoku 3.docx`, and the
   post-clue candidate lists are compared against the lists quoted in that
   document's own worked solutions. A mis-transcribed board fails the tests
   rather than quietly solving a different puzzle.
@@ -110,25 +110,28 @@ Size: 7
 Regions:        # id: name (no spaces)
 Groups:         # optional; name: region region ...
 Grid:           # region id per square
-Objects:        # name: square — blocks that square
+Objects:        # name: square... — blocks those squares; names may repeat
+Furniture:      # optional; name: square... — can be stood on
 People:         # one per line, count must equal Size
 Clues:
-  next_to Tim klimwand
+  next_to Tim klimwand               # beside any of the named things
+  knight_from Tim klimwand boulder   # a knight's move from any of them
+  on Jos bank                        # on a piece of furniture
   in_region Jos keukenwinkel         # any number of regions or groups
   outside Pip water                  # none of the given regions or groups
   same_region Anna Jos
   different_region Anna Pip
-  apart Luna Mauw               # different regions that do not share a side
+  apart Luna Mao                # different regions that do not share a side
   above Otto Tjitske 1          # exactly 1 row above; omit n for anywhere above
   left_of Jos Otto
   within Tjitske Otto 4         # at most 4 orthogonal steps apart
   at_least Tim Pip 6            # at least 6 steps apart
   alone Luna                    # nobody else in Luna's region
-  furthest Luna Mauw            # Luna is strictly further from Mauw than anyone
+  furthest Luna Mao             # Luna is strictly further from Mao than anyone
 ```
 
 `alone` and `furthest` expand to one relation per other person; `furthest`
-is a three-way relation (Luna, Mauw, that person).
+is a three-way relation (Luna, Mao, that person).
 
 ## Layout
 

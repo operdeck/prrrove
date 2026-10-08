@@ -13,7 +13,7 @@ Literals are "person stands on square". The constraint families:
 
 Positional clues then either delete literals outright ("Jos is in the
 kitchen") or become relations between two or three people ("Jos is left of
-Otto", "Luna is furthest from Mauw").
+Otto", "Luna is furthest from Mao").
 """
 
 from collections.abc import Callable, Collection, Iterable
@@ -48,16 +48,26 @@ def steps_between(a: Square, b: Square) -> int:
     return abs(a.row - b.row) + abs(a.col - b.col)
 
 
+def knight_move(a: Square, b: Square) -> bool:
+    """Two squares straight, then one to the side."""
+    return {abs(a.row - b.row), abs(a.col - b.col)} == {1, 2}
+
+
 @dataclass
 class Board:
-    """The fixed layout: regions, objects, and who is playing."""
+    """The fixed layout: regions, things on the board, and who is playing.
+
+    `objects` block their squares; `furniture` (such as a bank to lie on)
+    does not. Several things may share a name, like three suitcases.
+    """
 
     size: int
     regions: list[list[int]]
     region_names: dict[int, str]
-    objects: dict[str, Square]
+    objects: dict[str, list[Square]]
     people: list[str]
     groups: dict[str, list[str]] = field(default_factory=dict)
+    furniture: dict[str, list[Square]] = field(default_factory=dict)
     free: list[Square] = field(init=False)
     borders: set[frozenset[int]] = field(init=False)
 
@@ -68,8 +78,7 @@ class Board:
                 "one per row and column means these must match"
             )
         squares = [Square(r, c) for r in range(self.size) for c in range(self.size)]
-        occupied = set(self.objects.values())
-        self.free = [sq for sq in squares if sq not in occupied]
+        self.free = [sq for sq in squares if sq not in self.blocked]
         self.borders = {
             frozenset((self.region_of(sq), self.region_of(nb)))
             for sq in squares
@@ -98,10 +107,19 @@ class Board:
         """Share a side somewhere; a shared corner does not count."""
         return frozenset((a, b)) in self.borders
 
-    def object_at(self, name: str) -> Square:
-        if name not in self.objects:
-            raise ValueError(f"unknown object {name!r}; have {sorted(self.objects)}")
-        return self.objects[name]
+    @property
+    def blocked(self) -> set[Square]:
+        return {sq for squares in self.objects.values() for sq in squares}
+
+    def squares_of(self, names: Iterable[str]) -> set[Square]:
+        """Every square holding an object or piece of furniture of these names."""
+        found: set[Square] = set()
+        for name in names:
+            if name not in self.objects and name not in self.furniture:
+                known = sorted([*self.objects, *self.furniture])
+                raise ValueError(f"nothing called {name!r} on the board; have {known}")
+            found.update(self.objects.get(name, []), self.furniture.get(name, []))
+        return found
 
 
 # --- clue vocabulary ------------------------------------------------------
@@ -123,9 +141,19 @@ def _outside(board: Board, *names: str) -> SquareTest:
     return lambda sq: board.region_of(sq) not in ids
 
 
-def _next_to(board: Board, obj: str) -> SquareTest:
-    target = board.object_at(obj)
-    return lambda sq: steps_between(sq, target) == 1
+def _next_to(board: Board, *things: str) -> SquareTest:
+    targets = board.squares_of(things)
+    return lambda sq: any(steps_between(sq, t) == 1 for t in targets)
+
+
+def _knight_from(board: Board, *things: str) -> SquareTest:
+    targets = board.squares_of(things)
+    return lambda sq: any(knight_move(sq, t) for t in targets)
+
+
+def _on(board: Board, *things: str) -> SquareTest:
+    targets = board.squares_of(things)
+    return lambda sq: sq in targets
 
 
 def _same_region(board: Board) -> PairTest:
@@ -168,7 +196,9 @@ def _at_least(board: Board, steps: str) -> PairTest:
 FILTERS: dict[str, Callable[..., SquareTest]] = {
     "in_region": _in_region,  # in_region <person> <region or group>...
     "outside": _outside,  # outside <person> <region or group>...
-    "next_to": _next_to,  # next_to <person> <object>
+    "next_to": _next_to,  # next_to <person> <thing>...: beside any of them
+    "knight_from": _knight_from,  # knight_from <person> <thing>...: a knight's move away
+    "on": _on,  # on <person> <furniture>...
 }
 
 RELATIONS: dict[str, Callable[..., PairTest]] = {
@@ -269,7 +299,8 @@ def _further(a: Square, b: Square, other: Square) -> bool:
 
 def render(board: Board, model: Model, title: str, highlight: Collection[str] = frozenset()) -> str:
     """Draw the board, one colour per region, 4 columns per square."""
-    blocked = set(board.objects.values())
+    blocked = board.blocked
+    furnished = board.squares_of(board.furniture)
     at: dict[Square, str] = {}
     for person in board.people:
         square = model.chosen(person)
@@ -289,6 +320,8 @@ def render(board: Board, model: Model, title: str, highlight: Collection[str] = 
                 person = at[sq]
                 tint = "\033[38;5;21m" if person in highlight else INK
                 body = f"{tint}{person[:3]:^4}"
+            elif sq in furnished:
+                body = f"{INK} =  "
             else:
                 body = f"{INK} .  "
             line += colour + body + RESET
@@ -298,9 +331,14 @@ def render(board: Board, model: Model, title: str, highlight: Collection[str] = 
     for rid in sorted(board.region_names):
         swatch = _bg(PALETTE[rid % len(PALETTE)]) + "   " + RESET
         out.append(f"  {swatch} {board.region_names[rid]}")
-    out.append(f"\n  {INK}##{RESET} object   .  empty")
-    objects = ", ".join(f"{n} {s}" for n, s in sorted(board.objects.items()))
-    out.append(f"  objects: {objects}")
+    out.append(f"\n  {INK}##{RESET} object   =  furniture   .  empty")
+    for label, things in (("objects", board.objects), ("furniture", board.furniture)):
+        if things:
+            listed = ", ".join(
+                f"{name} {' '.join(map(str, sorted(squares)))}"
+                for name, squares in sorted(things.items())
+            )
+            out.append(f"  {label}: {listed}")
     return "\n".join(out)
 
 

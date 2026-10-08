@@ -1,7 +1,7 @@
 """Tests for the exact-cover engine and both puzzle compilers.
 
 The Murdoku cases check against the published solution and candidate lists in
-Prrrdoku.docx, so a wrong board transcription fails here rather than quietly
+Prrrdoku 3.docx, so a wrong board transcription fails here rather than quietly
 solving some other puzzle.
 """
 
@@ -324,7 +324,7 @@ def test_one_person_per_row_and_column(prrrdoku1):
 def test_nobody_stands_on_an_object(prrrdoku1):
     board, model = prrrdoku1
     result = Solver(model).solve()
-    assert not set(result.assignment.values()) & set(board.objects.values())
+    assert not set(result.assignment.values()) & board.blocked
 
 
 def test_people_count_must_match_board_size():
@@ -385,12 +385,14 @@ def test_prrrdoku2_region_borders_match_the_document():
 
 
 def test_prrrdoku3_candidate_lists_match_the_document():
+    """The five lists the document's solution opens with."""
     board, model = _load("prrrdoku3.txt")
     open_sq = _open(board, model)
-    assert open_sq["Tjitske"] == ["r7c2", "r8c1", "r8c3", "r9c2"]
-    assert open_sq["Luna"] == ["r5c7", "r6c7", "r7c8", "r7c9", "r8c9"]
-    assert len(open_sq["Otto"]) == 14
-    assert len(open_sq["Jos"]) == 21
+    assert open_sq["Tjitske"] == ["r4c1", "r5c2"]
+    assert open_sq["Jos"] == ["r1c2", "r1c3", "r3c4", "r3c5", "r8c3", "r8c4"]
+    assert open_sq["Tim"] == ["r1c6", "r3c6", "r6c7", "r6c9", "r7c6", "r9c6"]
+    assert len(open_sq["Anna"]) == 10
+    assert len(open_sq["Luna"]) == 19
 
 
 PUBLISHED = {
@@ -404,25 +406,25 @@ PUBLISHED = {
             "Tjitske": "r6c1",
             "Otto": "r7c6",
             "Luna": "r8c3",
-            "Mauw": "r9c9",
+            "Mao": "r9c9",
         },
         "cafe",
         ["Otto"],
     ),
     "prrrdoku3.txt": (
         {
-            "Mauw": "r1c4",
-            "Otto": "r2c1",
-            "Tim": "r3c7",
-            "Vladimir": "r4c3",
-            "Jos": "r5c8",
-            "Anna": "r6c6",
-            "Pip": "r7c5",
-            "Luna": "r8c9",
-            "Tjitske": "r9c2",
+            "Anna": "r1c4",
+            "Mao": "r2c9",
+            "Tim": "r3c6",
+            "Vladimir": "r4c5",
+            "Tjitske": "r5c2",
+            "Otto": "r6c7",
+            "Luna": "r7c1",
+            "Jos": "r8c3",
+            "Pip": "r9c8",
         },
-        "speeltuin",
-        ["Pip"],
+        "moestuin",
+        ["Tim"],
     ),
 }
 
@@ -443,11 +445,39 @@ def test_later_prrrdokus_reach_the_published_solution(name):
     ] == company
 
 
-def test_prrrdoku2_needs_what_if():
-    """The document's own solution splits on cases here; so must the engine."""
-    _, model = _load("prrrdoku2.txt")
+@pytest.mark.parametrize("name", ["prrrdoku2.txt", "prrrdoku3.txt"])
+def test_later_prrrdokus_need_what_if(name):
+    """The document's own solutions split on cases here; so must the engine."""
+    _, model = _load(name)
     result = Solver(model, _before("what_if")).solve()
     assert not result.solved and result.contradiction is None
+
+
+def test_furniture_can_be_stood_on_and_objects_cannot():
+    sq = murdoku.Square
+    board = murdoku.Board(
+        2,
+        [[0, 0], [0, 0]],
+        {0: "here"},
+        {"rock": [sq(0, 0)]},
+        ["A", "B"],
+        furniture={"bank": [sq(1, 0), sq(1, 1)]},
+    )
+    assert board.free == [sq(0, 1), sq(1, 0), sq(1, 1)]
+    model = murdoku.compile_puzzle(board, [("on", ["A", "bank"])])
+    assert sorted(model.value_of(lit) for lit in model.options("A")) == [sq(1, 0), sq(1, 1)]
+
+
+def test_knight_move_and_shared_object_names():
+    sq = murdoku.Square
+    board = murdoku.Board(
+        3, [[0] * 3] * 3, {0: "here"}, {"koffer": [sq(0, 0), sq(2, 2)]}, ["A", "B", "C"]
+    )
+    model = murdoku.compile_puzzle(board, [("knight_from", ["A", "koffer"])])
+    reachable = sorted(model.value_of(lit) for lit in model.options("A"))
+    assert reachable == [sq(0, 1), sq(1, 0), sq(1, 2), sq(2, 1)]
+    with pytest.raises(ValueError):
+        murdoku.compile_puzzle(board, [("next_to", ["A", "suitcase"])])
 
 
 def test_furthest_is_strict():

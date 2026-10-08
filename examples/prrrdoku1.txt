@@ -1,6 +1,6 @@
 # Prrrdoku 1 - "Wie krijgt Vladimir op schoot?"  (7x7, six regions)
 #
-# Board transcribed from the figure in Prrrdoku.docx and cross-checked against
+# Board transcribed from the figure in Prrrdoku 3.docx and cross-checked against
 # the candidate lists in that document's own solution: klimwand's neighbours
 # are exactly {r1c1, r2c2, r3c1}, vuurtje's exactly {r4c2, r5c1, r5c3, r6c2},
 # keukenwinkel minus kookeiland is exactly the six Jos/Anna squares, and
