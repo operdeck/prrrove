@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "csp-solver"
+version = "0.1.0"
+description = "Generic constraint satisfaction solver with human-readable reasoning"
+authors = [{name = "Otto Perdeck"}]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+csp = "csp.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "black>=22.0",
+    "mypy>=0.990",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
