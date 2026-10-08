@@ -49,12 +49,13 @@ Candidates, roughly in order of value:
   *k*-constraint generalisation of subsumption. One rule covers all four
   Sudoku patterns; only connected groups of anchors are searched. *k*=4
   (quads, Jellyfish) is not in the ladder: no example needs it.
-- **Chains.** This is now the gap that most limits the ladder —
-  `sudoku_beyond.txt` stalls on it. Build the implication graph over literals (eliminating *x*
+- **Chains.** Build the implication graph over literals (eliminating *x*
   forces *y* when some `EXACTLY_ONE` drops to one option) and look for
-  contradictions.
-- **Bounded what-if.** Assign a literal, propagate on a copy, keep the
-  elimination if it contradicts. Needs model cloning, which does not exist yet.
+  contradictions. `what_if` already finds what short chains would, at more
+  cost; chains would explain the same deduction more like a person does.
+- ~~Bounded what-if~~ — done as `rule_what_if`, using `Model.clone()`. It
+  runs only `single`/`relations`/`subsumption` on the copy, never itself,
+  so it stays one level deep.
 
 Keep the ladder honest: if a rule never fires on any example, say so rather
 than listing it as working.
@@ -67,7 +68,7 @@ than listing it as working.
    row" is about people, so people are the variables; copying Sudoku's
    cell-centric shape produced an unsatisfiable model.
 3. Express every rule as `EXACTLY_ONE` / `AT_MOST_ONE` sets, plus relations
-   for pairwise clues.
+   (over two or more variables) for clues that link people.
 4. A `render(...) -> str` function, and a `touched_*(steps)` helper returning
    the names to highlight.
 5. Wire into `cli.detect` and `cli.main`.
@@ -87,26 +88,32 @@ Numbers from actual runs, not estimates:
 | `sudoku_hidden_pair.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `subsumption` 1 |
 | `sudoku_xwing.txt` | solved, 57 iterations | `single` 54, `cover2` 2 |
 | `sudoku_swordfish.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `cover3` 1 |
-| `sudoku_beyond.txt` | **stalls**, 13 iterations | `subsumption` 6, `single` 4, `cover2` 2 |
+| `sudoku_what_if.txt` | solved, 66 iterations | `single` 55, `subsumption` 6, `cover2` 2, `what_if` 2 |
 | `prrrdoku1.txt` | solved, 88 iterations | `relations` 79, `single` 7, `subsumption` 1 |
+| `prrrdoku2.txt` | solved, 162 iterations | `relations` 149, `single` 9, `cover3` 1, `cover2` 1, `what_if` 1 |
+| `prrrdoku3.txt` | solved, 178 iterations | `relations` 167, `single` 9, `subsumption` 1 |
 
 The graded Sudokus were generated (random minimal puzzles, uniqueness checked
-by backtracking) and picked because each needs its rule: the tests remove the
-rule and assert the puzzle stalls. A single firing can unlock a whole puzzle,
-so the counts are small. `cover` never fires on `prrrdoku1.txt`.
+by backtracking) and picked because each needs its rule: the tests cut the
+ladder just before it and assert the puzzle stalls. A single firing can
+unlock a whole puzzle, so the counts are small.
+
+On Prrrdoku 2, `cover3` is the document's step "Tim, Jos and Pip fill rows
+1-3, so Anna is outside them", and `cover2` is "Pip and Mauw fill columns 8
+and 9". The document then splits on Otto's square; `what_if` instead rules
+out Tim on r2c3 (Jos is left with nowhere to go). Different route, same
+answer.
 
 ## Known gaps
 
-- Only Prrrdoku 1 is transcribed. Puzzles 2 and 3 exist in `Prrrdoku.docx`
-  (9x9, more regions, extra clue types). Their boards are **images** in the
-  docx — extract from `word/media/*.png` and read them; the tables in that
-  file are only colour legends. Always cross-check a transcription against the
-  candidate lists in the document's worked solution before trusting it.
-- Clue types not yet modelled: "is the only one in their region"
-  (a cardinality constraint over a region), "regions do not border each other"
-  (needs region adjacency), "X is furthest from Y of anyone" (a global
-  optimum, not a pairwise relation). Puzzles 2 and 3 need these.
-- No model cloning, so no what-if search.
+- Prrrdoku boards are **images** in `Prrrdoku.docx` — extract from
+  `word/media/*.png` and read them; the tables in that file are colour
+  legends, useful for matching colours to region names (read `w:fill`).
+  Always cross-check a transcription against the candidate lists in the
+  document's worked solution before trusting it.
+- "Only Luna may stand in the water" is a board rule, written out as one
+  `outside` clue per other person in `prrrdoku3.txt`.
 - `relations` is plain arc consistency and re-scans every relation from
-  scratch on each pass; it accounts for most of Prrrdoku 1's iteration count.
-  A dirty-variable queue would cut that.
+  scratch on each pass; it accounts for most Prrrdoku iterations. Three-way
+  relations (`furthest`) make each scan quadratic in domain size. A
+  dirty-variable queue would cut both.

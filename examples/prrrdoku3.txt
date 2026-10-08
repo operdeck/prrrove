@@ -1,0 +1,89 @@
+# Prrrdoku 3 - "Een dagje Amsterdam"  (9x9, ten regions)
+#
+# Board transcribed from the figure in Prrrdoku.docx; colours matched to names
+# via the document's legend table (Helmholtzstraat orange, Bankastraat
+# yellow). Cross-checked against the solution: vuurtje's neighbours are r7c2,
+# r8c1, r8c3, r9c2; woonboot's free squares r5c7, r6c7, r7c8, r7c9, r8c9;
+# klimgebied + kantoor has 14 free squares; Amsterdam minus water has 21.
+# Every object occupies its square, trees and the bankje included.
+
+Size: 9
+
+Regions:
+0: klimgebied_noord
+1: klimgebied_zuid
+2: speeltuin
+3: moestuin
+4: helmholtzstraat
+5: bankastraat
+6: kantoor
+7: woonboot
+8: kampeerplek
+9: water
+
+Groups:
+klimgebied: klimgebied_noord klimgebied_zuid
+amsterdam: helmholtzstraat bankastraat kantoor woonboot water
+
+Grid:
+0 0 0 3 3 3 4 4 4
+0 0 2 3 3 3 4 4 4
+2 2 2 3 3 4 4 5 5
+1 1 2 2 6 6 6 5 5
+1 1 1 2 6 6 7 5 5
+1 1 8 2 2 6 7 7 5
+8 8 8 8 2 9 9 7 7
+8 8 8 8 9 9 9 9 7
+8 8 8 8 9 9 9 9 9
+
+Objects:
+klimwand: r1c2
+boom1: r1c5
+boom2: r1c8
+kas: r2c5
+lantaarn: r2c8
+glijbaan: r3c2
+boom3: r3c9
+bankje: r4c9
+boulder: r5c2
+bureau: r5c6
+boom4: r6c1
+boom5: r6c4
+kombuis: r6c8
+boom6: r7c3
+vuurtje: r8c2
+
+People:
+Tim
+Jos
+Otto
+Anna
+Pip
+Tjitske
+Vladimir
+Mauw
+Luna
+
+# "In het water kan alleen Luna staan" is a board rule, written out per person.
+# Clue 13 is the question being asked.
+Clues:
+outside Tim water
+outside Jos water
+outside Otto water
+outside Anna water
+outside Pip water
+outside Tjitske water
+outside Vladimir water
+outside Mauw water
+in_region Tim klimgebied amsterdam
+in_region Otto klimgebied kantoor
+in_region Jos amsterdam
+in_region Luna woonboot
+next_to Tjitske vuurtje
+within Jos Anna 3
+within Anna Pip 2
+at_least Tim Pip 6
+at_least Jos Otto 10
+at_least Tjitske Mauw 10
+alone Luna
+furthest Luna Mauw

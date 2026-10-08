@@ -21,8 +21,10 @@ from csp.core import (
     Model,
     Solver,
     rule_cover,
+    rule_relations,
     rule_single,
     rule_subsumption,
+    rule_what_if,
 )
 from csp.puzzlefile import load_board
 
@@ -112,6 +114,39 @@ def test_cover_needs_disjoint_anchors():
     assert not m.is_false(c)
 
 
+def test_three_way_relation_needs_a_supporting_combination():
+    m = Model()
+    for v in "abc":
+        m.constrain(f"{v} picks one", Kind.EXACTLY_ONE, [m.literal(v, d) for d in (1, 2, 3)], defines=v)
+    m.relate("a is the sum", "abc", lambda a, b, c: a == b + c)
+    while rule_relations(m):
+        pass
+    assert [m.value_of(l) for l in m.options("a")] == [2, 3]
+    assert [m.value_of(l) for l in m.options("b")] == [1, 2]
+
+
+def test_clone_leaves_the_original_untouched():
+    m = Model()
+    a, b = m.literal("x", 1), m.literal("x", 2)
+    m.constrain("x picks one", Kind.EXACTLY_ONE, [a, b], defines="x")
+    twin = m.clone()
+    twin.assign(a, "test", "chosen")
+    assert twin.is_false(b) and not m.is_false(b) and m.log == []
+
+
+def test_what_if_eliminates_a_literal_that_leads_to_contradiction():
+    """x=1 forces y=1 by relation, but y=1 is barred by an at-most-one with z=1."""
+    m = Model()
+    for v in "xyz":
+        m.constrain(f"{v} picks one", Kind.EXACTLY_ONE, [m.literal(v, d) for d in (1, 2)], defines=v)
+    m.relate("y follows x", "xy", lambda x, y: x != 1 or y == 1)
+    m.relate("y avoids z", "yz", lambda y, z: y != 1 or z != 1)
+    m.relate("z follows x", "xz", lambda x, z: x != 1 or z == 1)
+    assert rule_relations(m) is False
+    assert rule_what_if(m) is True
+    assert m.is_false(m.literal("x", 1))
+
+
 # --- sudoku ---------------------------------------------------------------
 
 
@@ -173,24 +208,26 @@ def _backtrack(grid):
     return g
 
 
-def _without(*names):
-    return [(n, r) for n, r in DEFAULT_RULES if n not in names]
+def _before(rule):
+    names = [n for n, _ in DEFAULT_RULES]
+    return DEFAULT_RULES[: names.index(rule)]
 
 
 FISH = r"(\d) once in (row|col) \d+"
 
-# file, the rules it cannot do without, and the deduction pattern it must show
+# file, the rule it needs, and the deduction pattern it must show
 GRADED = [
-    ("sudoku_pointing.txt", ("subsumption", "cover2", "cover3"), "subsumption", r"once in box"),
-    ("sudoku_naked_pair.txt", ("cover2", "cover3"), "cover2", r"^r\dc\d holds one digit, r\dc\d holds one digit use up"),
-    ("sudoku_hidden_pair.txt", ("cover2", "cover3"), "cover2", r"^\d once in [a-z]+ [\d,]+, \d once in .* use up r\dc\d holds"),
-    ("sudoku_xwing.txt", ("cover2", "cover3"), "cover2", rf"^{FISH}, \1 once in \2 \d+ use up \1 once in (?!\2)"),
-    ("sudoku_swordfish.txt", ("cover3",), "cover3", rf"^{FISH}, \1 once in \2 \d+, \1 once in \2 \d+ use up \1 once in (?!\2)"),
+    ("sudoku_pointing.txt", "subsumption", r"once in box"),
+    ("sudoku_naked_pair.txt", "cover2", r"^r\dc\d holds one digit, r\dc\d holds one digit use up"),
+    ("sudoku_hidden_pair.txt", "cover2", r"^\d once in [a-z]+ [\d,]+, \d once in .* use up r\dc\d holds"),
+    ("sudoku_xwing.txt", "cover2", rf"^{FISH}, \1 once in \2 \d+ use up \1 once in (?!\2)"),
+    ("sudoku_swordfish.txt", "cover3", rf"^{FISH}, \1 once in \2 \d+, \1 once in \2 \d+ use up \1 once in (?!\2)"),
+    ("sudoku_what_if.txt", "what_if", r"^assuming it leads"),
 ]
 
 
-@pytest.mark.parametrize("name, needs, rule, pattern", GRADED)
-def test_graded_sudoku_matches_independent_solution(name, needs, rule, pattern):
+@pytest.mark.parametrize("name, rule, pattern", GRADED)
+def test_graded_sudoku_matches_independent_solution(name, rule, pattern):
     model, grid = sudoku.compile_puzzle((EXAMPLES / name).read_text())
     result = Solver(model).solve()
     assert result.solved
@@ -203,20 +240,11 @@ def test_graded_sudoku_matches_independent_solution(name, needs, rule, pattern):
     assert any(s.rule == rule and re.search(pattern, s.reason) for s in model.log)
 
 
-@pytest.mark.parametrize("name, needs, rule, pattern", GRADED)
-def test_graded_sudoku_stalls_without_its_rule(name, needs, rule, pattern):
+@pytest.mark.parametrize("name, rule, pattern", GRADED)
+def test_graded_sudoku_stalls_without_its_rule(name, rule, pattern):
     model, _ = sudoku.compile_puzzle((EXAMPLES / name).read_text())
-    result = Solver(model, _without(*needs)).solve()
+    result = Solver(model, _before(rule)).solve()
     assert not result.solved and result.contradiction is None
-
-
-def test_beyond_the_ladder_stalls_honestly():
-    """Needs chains or what-if; the engine must stop, not guess or contradict."""
-    model, grid = sudoku.compile_puzzle((EXAMPLES / "sudoku_beyond.txt").read_text())
-    result = Solver(model).solve()
-    assert not result.solved and result.contradiction is None
-    expected = _backtrack(grid)
-    assert all(expected[int(v[1]) - 1][int(v[3]) - 1] == d for v, d in result.assignment.items())
 
 
 def test_sudoku_rejects_a_malformed_grid():
@@ -298,6 +326,90 @@ def test_nobody_stands_on_an_object(prrrdoku1):
 def test_people_count_must_match_board_size():
     with pytest.raises(ValueError):
         murdoku.Board(3, [[0] * 3] * 3, {0: "a"}, {}, ["only", "two"])
+
+
+# --- prrrdoku 2 and 3 -----------------------------------------------------
+
+
+def _load(name):
+    board, clues = load_board((EXAMPLES / name).read_text())
+    return board, murdoku.compile_puzzle(board, clues)
+
+
+def _open(board, model):
+    return {p: [str(s) for s in sqs] for p, sqs in murdoku.open_squares(board, model).items()}
+
+
+def test_prrrdoku2_candidate_lists_match_the_document():
+    board, model = _load("prrrdoku2.txt")
+    open_sq = _open(board, model)
+    assert open_sq["Tim"] == ["r1c2", "r2c1", "r2c3", "r3c2"]
+    assert open_sq["Tjitske"] == ["r5c2", "r6c1", "r6c3", "r7c2"]
+    assert open_sq["Otto"] == ["r5c6", "r6c5", "r6c7", "r7c6"]
+    assert open_sq["Luna"] == ["r7c4", "r8c3", "r8c5", "r9c4"]
+
+
+def test_prrrdoku2_region_borders_match_the_document():
+    """'De speeltuin grenst aan het klimgebied, de keukenwinkel, het cafe en de kampeerplek.'"""
+    board, _ = _load("prrrdoku2.txt")
+    speeltuin = board.region_id("speeltuin")
+    touching = {board.region_names[r] for r in board.region_names if board.regions_touch(speeltuin, r)}
+    assert touching == {"klimgebied", "keukenwinkel", "cafe", "kampeerplek"}
+
+
+def test_prrrdoku3_candidate_lists_match_the_document():
+    board, model = _load("prrrdoku3.txt")
+    open_sq = _open(board, model)
+    assert open_sq["Tjitske"] == ["r7c2", "r8c1", "r8c3", "r9c2"]
+    assert open_sq["Luna"] == ["r5c7", "r6c7", "r7c8", "r7c9", "r8c9"]
+    assert len(open_sq["Otto"]) == 14
+    assert len(open_sq["Jos"]) == 21
+
+
+PUBLISHED = {
+    "prrrdoku2.txt": (
+        {"Jos": "r1c4", "Pip": "r2c8", "Tim": "r3c2", "Anna": "r4c7", "Vladimir": "r5c5",
+         "Tjitske": "r6c1", "Otto": "r7c6", "Luna": "r8c3", "Mauw": "r9c9"},
+        "cafe", ["Otto"],
+    ),
+    "prrrdoku3.txt": (
+        {"Mauw": "r1c4", "Otto": "r2c1", "Tim": "r3c7", "Vladimir": "r4c3", "Jos": "r5c8",
+         "Anna": "r6c6", "Pip": "r7c5", "Luna": "r8c9", "Tjitske": "r9c2"},
+        "speeltuin", ["Pip"],
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(PUBLISHED))
+def test_later_prrrdokus_reach_the_published_solution(name):
+    solution, vlad_region, company = PUBLISHED[name]
+    board, model = _load(name)
+    result = Solver(model).solve()
+    assert result.solved
+    assert {p: str(sq) for p, sq in result.assignment.items()} == solution
+    region = board.region_of(result.assignment["Vladimir"])
+    assert board.region_names[region] == vlad_region
+    assert [p for p, sq in result.assignment.items()
+            if p != "Vladimir" and board.region_of(sq) == region] == company
+
+
+def test_prrrdoku2_needs_what_if():
+    """The document's own solution splits on cases here; so must the engine."""
+    _, model = _load("prrrdoku2.txt")
+    result = Solver(model, _before("what_if")).solve()
+    assert not result.solved and result.contradiction is None
+
+
+def test_furthest_is_strict():
+    board = murdoku.Board(2, [[0, 0], [0, 0]], {0: "here"}, {}, ["A", "B"])
+    model = murdoku.compile_puzzle(board, [("furthest", ["A", "B"])])
+    assert len(model.relations) == 0
+    board = murdoku.Board(3, [[0] * 3] * 3, {0: "here"}, {}, ["A", "B", "C"])
+    model = murdoku.compile_puzzle(board, [("furthest", ["A", "B"])])
+    (rel,) = model.relations
+    sq = murdoku.Square
+    assert rel.holds(sq(0, 0), sq(2, 2), sq(1, 1))
+    assert not rel.holds(sq(0, 2), sq(2, 2), sq(2, 0))
 
 
 def test_unknown_region_name_is_rejected():

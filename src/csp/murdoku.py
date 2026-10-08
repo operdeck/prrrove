@@ -12,7 +12,8 @@ Literals are "person stands on square". The constraint families:
   * each column holds exactly one person
 
 Positional clues then either delete literals outright ("Jos is in the
-kitchen") or become pairwise relations ("Jos is left of Otto").
+kitchen") or become relations between two or three people ("Jos is left of
+Otto", "Luna is furthest from Mauw").
 """
 
 from dataclasses import dataclass, field
@@ -54,6 +55,7 @@ class Board:
     region_names: dict[int, str]
     objects: dict[str, Square]
     people: list[str]
+    groups: dict[str, list[str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if len(self.people) != self.size:
@@ -68,6 +70,14 @@ class Board:
             for c in range(self.size)
             if Square(r, c) not in occupied
         ]
+        self.borders: set[frozenset[int]] = set()
+        for r in range(self.size):
+            for c in range(self.size):
+                for dr, dc in ((0, 1), (1, 0)):
+                    if r + dr < self.size and c + dc < self.size:
+                        a, b = self.regions[r][c], self.regions[r + dr][c + dc]
+                        if a != b:
+                            self.borders.add(frozenset((a, b)))
 
     def region_of(self, square: Square) -> int:
         return self.regions[square.row][square.col]
@@ -78,14 +88,30 @@ class Board:
                 return rid
         raise ValueError(f"unknown region {name!r}; have {sorted(self.region_names.values())}")
 
+    def region_ids(self, names) -> set[int]:
+        """Region ids for a mix of region names and group names."""
+        ids: set[int] = set()
+        for name in names:
+            members = self.groups.get(name, [name])
+            ids.update(self.region_id(m) for m in members)
+        return ids
+
+    def regions_touch(self, a: int, b: int) -> bool:
+        """Share a side somewhere; a shared corner does not count."""
+        return frozenset((a, b)) in self.borders
+
 
 # --- clue vocabulary ------------------------------------------------------
 # Each entry either filters one person's squares, or relates two people.
 
 FILTERS: dict[str, Callable[..., Callable[[Square], bool]]] = {
-    # in_region <person> <region>
-    "in_region": lambda board, region: (
-        lambda sq: board.region_of(sq) == board.region_id(region)
+    # in_region <person> <region or group>...   in any of them
+    "in_region": lambda board, *names: (
+        lambda sq, ids=board.region_ids(names): board.region_of(sq) in ids
+    ),
+    # outside <person> <region or group>...     in none of them
+    "outside": lambda board, *names: (
+        lambda sq, ids=board.region_ids(names): board.region_of(sq) not in ids
     ),
     # next_to <person> <object>
     "next_to": lambda board, obj: (
@@ -98,13 +124,32 @@ RELATIONS: dict[str, Callable[..., Callable[[Square, Square], bool]]] = {
     "same_region": lambda board: (
         lambda a, b: board.region_of(a) == board.region_of(b)
     ),
+    # different_region <a> <b>
+    "different_region": lambda board: (
+        lambda a, b: board.region_of(a) != board.region_of(b)
+    ),
+    # apart <a> <b>          different regions that do not border each other
+    "apart": lambda board: (
+        lambda a, b: board.region_of(a) != board.region_of(b)
+        and not board.regions_touch(board.region_of(a), board.region_of(b))
+    ),
     # left_of <a> <b>        a is somewhere left of b
     "left_of": lambda board: (lambda a, b: a.col < b.col),
-    # above <a> <b> <n>      a is exactly n rows above b
-    "above": lambda board, n: (lambda a, b: a.row + int(n) == b.row),
+    # above <a> <b> [n]      a is exactly n rows above b, or anywhere above
+    "above": lambda board, n=None: (
+        (lambda a, b: a.row < b.row) if n is None
+        else (lambda a, b: a.row + int(n) == b.row)
+    ),
     # within <a> <b> <n>     at most n steps apart
     "within": lambda board, n: (lambda a, b: steps_between(a, b) <= int(n)),
+    # at_least <a> <b> <n>   at least n steps apart
+    "at_least": lambda board, n: (lambda a, b: steps_between(a, b) >= int(n)),
 }
+
+# Clues that expand into one relation per other person.
+#   alone <a>          nobody else in a's region
+#   furthest <a> <b>   a is strictly further from b than anyone else is
+GROUP_CLUES = {"alone": 1, "furthest": 2}
 
 
 def compile_puzzle(board: Board, clues: list[tuple[str, list[str]]]) -> Model:
@@ -142,6 +187,18 @@ def compile_puzzle(board: Board, clues: list[tuple[str, list[str]]]) -> Model:
 
     for kind, args in clues:
         if kind in FILTERS:
+            arity = 1
+        elif kind in RELATIONS:
+            arity = 2
+        elif kind in GROUP_CLUES:
+            arity = GROUP_CLUES[kind]
+        else:
+            raise ValueError(f"unknown clue {kind!r}")
+        for who in args[:arity]:
+            if who not in board.people:
+                raise ValueError(f"clue {kind} {' '.join(args)} names unknown person {who!r}")
+
+        if kind in FILTERS:
             person, rest = args[0], args[1:]
             allowed = FILTERS[kind](board, *rest)
             label = " ".join([kind, *rest])
@@ -151,10 +208,20 @@ def compile_puzzle(board: Board, clues: list[tuple[str, list[str]]]) -> Model:
         elif kind in RELATIONS:
             a, b, rest = args[0], args[1], args[2:]
             model.relate(
-                " ".join([a, kind, b, *rest]), a, b, RELATIONS[kind](board, *rest)
+                " ".join([a, kind, b, *rest]), (a, b), RELATIONS[kind](board, *rest)
             )
-        else:
-            raise ValueError(f"unknown clue {kind!r}")
+        elif kind == "alone":
+            a = args[0]
+            differ = RELATIONS["different_region"](board)
+            for p in board.people:
+                if p != a:
+                    model.relate(f"{a} alone in region, so not with {p}", (a, p), differ)
+        elif kind == "furthest":
+            a, b = args
+            further = lambda sa, sb, sp: steps_between(sa, sb) > steps_between(sp, sb)
+            for p in board.people:
+                if p not in (a, b):
+                    model.relate(f"{a} further from {b} than {p}", (a, b, p), further)
 
     return model
 

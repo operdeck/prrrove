@@ -3,13 +3,15 @@
 Every puzzle is expressed as:
   * literals  - atomic choices, e.g. "r3c4 = 7" or "Tim = r1c2"
   * constraints - sets of literals tagged EXACTLY_ONE or AT_MOST_ONE
-  * relations  - pairwise predicates between two variables' choices
+  * relations  - predicates over the choices of two or more variables
 
 Nothing in this module knows about any particular puzzle.
 """
 
+import copy
 from dataclasses import dataclass, field
 from enum import Enum
+from itertools import product
 from typing import Any, Callable, Iterable, Optional
 
 UNKNOWN, TRUE, FALSE = 0, 1, -1
@@ -46,12 +48,11 @@ class Constraint:
 
 @dataclass(frozen=True)
 class Relation:
-    """`holds(value_of_a, value_of_b)` must be true in any solution."""
+    """`holds(*values)` must be true in any solution, values in `variables` order."""
 
     name: str
-    var_a: str
-    var_b: str
-    holds: Callable[[Any, Any], bool]
+    variables: tuple[str, ...]
+    holds: Callable[..., bool]
 
 
 @dataclass(frozen=True)
@@ -109,8 +110,15 @@ class Model:
             self._domain_of[defines] = index
         return index
 
-    def relate(self, name: str, var_a: str, var_b: str, holds) -> None:
-        self.relations.append(Relation(name, var_a, var_b, holds))
+    def relate(self, name: str, variables: Iterable[str], holds) -> None:
+        self.relations.append(Relation(name, tuple(variables), holds))
+
+    def clone(self) -> "Model":
+        """Independent truth state and log; structure is shared, as it never changes."""
+        twin = copy.copy(self)
+        twin._state = list(self._state)
+        twin.log = []
+        return twin
 
     # --- inspection -------------------------------------------------------
 
@@ -236,23 +244,21 @@ def rule_single(model: Model) -> bool:
 
 
 def rule_relations(model: Model) -> bool:
-    """Drop choices that no longer have a partner satisfying some relation."""
+    """Drop a choice that no combination of the other variables' choices supports."""
     for relation in model.relations:
-        for forward in (True, False):
-            this = relation.var_a if forward else relation.var_b
-            other = relation.var_b if forward else relation.var_a
-            supports = model.options(other)
-            for lit in model.options(this):
-                if model.is_true(lit):
-                    continue
+        domains = [model.options(v) for v in relation.variables]
+        for i, var in enumerate(relation.variables):
+            others = domains[:i] + domains[i + 1:]
+            for lit in domains[i]:
                 mine = model.value_of(lit)
-                ok = False
-                for partner in supports:
-                    theirs = model.value_of(partner)
-                    pair = (mine, theirs) if forward else (theirs, mine)
-                    if relation.holds(*pair):
-                        ok = True
-                        break
+                ok = any(
+                    relation.holds(
+                        *(model.value_of(l) for l in combo[:i]),
+                        mine,
+                        *(model.value_of(l) for l in combo[i:]),
+                    )
+                    for combo in product(*others)
+                )
                 if not ok:
                     model.eliminate(
                         lit, "relation", f"no partner for {relation.name}"
@@ -384,12 +390,45 @@ def rule_cover(k: int) -> Callable[[Model], bool]:
     return rule
 
 
+def rule_what_if(model: Model) -> bool:
+    """Assume a literal on a copy; if the cheap rules then contradict, it is false.
+
+    Sound because every rule used on the copy is sound: a contradiction
+    reached from "x holds" proves x cannot hold. Variables with the fewest
+    options are tried first, as a person would.
+    """
+    inner = [rule_single, rule_relations, rule_subsumption]
+    tried: set[int] = set()
+    for var in sorted(model.variables, key=lambda v: len(model.options(v))):
+        if model.chosen(var) is not None:
+            continue
+        for lit in model.options(var):
+            if lit in tried:
+                continue
+            tried.add(lit)
+            twin = model.clone()
+            try:
+                twin.assign(lit, "what-if", "assumed")
+                twin.check()
+                while any(r(twin) for r in inner):
+                    twin.check()
+            except Contradiction as exc:
+                model.eliminate(
+                    lit,
+                    "what_if",
+                    f"assuming it leads, in {len(twin.log)} steps, to: {exc}",
+                )
+                return True
+    return False
+
+
 DEFAULT_RULES: list[tuple[str, Callable[[Model], bool]]] = [
     ("single", rule_single),
     ("relations", rule_relations),
     ("subsumption", rule_subsumption),
     ("cover2", rule_cover(2)),
     ("cover3", rule_cover(3)),
+    ("what_if", rule_what_if),
 ]
 
 

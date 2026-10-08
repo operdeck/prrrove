@@ -18,8 +18,8 @@ Three ingredients, defined in `src/csp/core.py`:
 
 - **Literals** — atomic choices. `r3c4=7` for Sudoku, `Tim=r1c1` for Murdoku.
 - **Constraints** — a set of literals tagged `EXACTLY_ONE` or `AT_MOST_ONE`.
-- **Relations** — a predicate over two variables' choices, for clues like
-  "Jos is somewhere left of Otto".
+- **Relations** — a predicate over two or more variables' choices, for clues
+  like "Jos is somewhere left of Otto" or "Luna is furthest from Mauw".
 
 A *variable* is just a constraint flagged as owning a whole domain, so
 `model.chosen("Tim")` can report what Tim settled on.
@@ -39,7 +39,7 @@ square is only possible for Vladimir" says nothing at all.
 | `EXACTLY_ONE` | cell holds one digit | person stands somewhere |
 | | digit once per row / col / box | one person per row; one per column |
 | `AT_MOST_ONE` | — | square holds at most one person |
-| Relations | — | `same_region`, `left_of`, `above`, `within` |
+| Relations | — | position, distance and region clues; see [Puzzle files](#puzzle-files) |
 
 Murdoku's variables are people rather than squares because that is the shape
 of the rules: "exactly one figure per row" puts seven figures on a 7x7 board,
@@ -54,9 +54,10 @@ Applied cheapest-first; any success restarts the ladder.
 | Rule | What it does |
 |---|---|
 | `single` | An `EXACTLY_ONE` with one option left forces it. |
-| `relations` | Arc consistency: drop a choice with no surviving partner. |
+| `relations` | Arc consistency: drop a choice no combination of the other variables supports. |
 | `subsumption` | If `live(A) ⊆ live(B)` and A is `EXACTLY_ONE`, every B-literal outside A is false. |
 | `cover2`, `cover3` | The same over *k* constraints: *k* disjoint `EXACTLY_ONE`s whose live literals fit inside *k* others use those others up. |
+| `what_if` | Assume a literal on a copy, run `single`/`relations`/`subsumption`; if that contradicts, the literal is false. |
 
 `single` covers Sudoku's naked single *and* hidden single with no
 special-casing — they are the same statement about different constraints
@@ -67,12 +68,16 @@ special-casing — they are the same statement about different constraints
 digit-in-house), X-Wing (*k*=2) and Swordfish (*k*=3) (As are digit-in-row,
 Bs digit-in-column) — one rule, again with no special-casing.
 
-Not implemented: chains, bounded what-if. See `AGENT.md`.
+`what_if` is the case split a person does when stuck ("if Tim were on r2c3,
+Jos would have nowhere to go"). It is last on the ladder and bounded: one
+assumption, cheap rules only, no nested guessing.
+
+Not implemented: chains. See `AGENT.md`.
 
 ## Verification
 
 ```bash
-uv run --with pytest pytest tests/ -q      # 29 tests
+uv run --with pytest pytest tests/ -q      # 40 tests
 ```
 
 Correctness is checked against ground truth, not self-consistency:
@@ -80,37 +85,46 @@ Correctness is checked against ground truth, not self-consistency:
 - Sudoku's solution is re-validated independently — every row, column and box
   is a permutation of 1-9, and every given survives.
 - The graded Sudokus (`sudoku_pointing`, `_naked_pair`, `_hidden_pair`,
-  `_xwing`, `_swordfish`) are compared cell by cell against a plain
-  backtracking search that shares no code with the engine. Each must also
-  show its named pattern in the log, and must stall when its rule is removed,
-  so the example really exercises that rung of the ladder.
-- `sudoku_beyond.txt` needs more than the ladder has; the test checks the
-  engine stops without a contradiction and every cell it did fill is right.
-- Prrrdoku 1 is checked against the published solution in `Prrrdoku.docx`, and
-  the post-clue candidate lists are compared against the four lists quoted in
-  that document's own worked solution. A mis-transcribed board fails the tests
+  `_xwing`, `_swordfish`, `_what_if`) are compared cell by cell against a
+  plain backtracking search that shares no code with the engine. Each must
+  also show its named pattern in the log, and must stall when the ladder is
+  cut just before its rule, so the example really exercises that rung.
+- All three Prrrdokus are checked against the published solutions and the
+  puzzle's question (who is in Vladimir's region) in `Prrrdoku.docx`, and the
+  post-clue candidate lists are compared against the lists quoted in that
+  document's own worked solutions. A mis-transcribed board fails the tests
   rather than quietly solving a different puzzle.
 
 ## Puzzle files
 
 Sudoku is a plain grid; `.`/`0` are blanks, and `|`/`-` are ignored.
 
-Murdoku uses named sections — see `examples/prrrdoku1.txt`:
+Murdoku uses named sections — see `examples/prrrdoku*.txt`:
 
 ```
 Size: 7
-Regions:        # id: name
+Regions:        # id: name (no spaces)
+Groups:         # optional; name: region region ...
 Grid:           # region id per square
 Objects:        # name: square — blocks that square
 People:         # one per line, count must equal Size
 Clues:
   next_to Tim klimwand
-  in_region Jos keukenwinkel
+  in_region Jos keukenwinkel         # any number of regions or groups
+  outside Pip water                  # none of the given regions or groups
   same_region Anna Jos
-  above Otto Tjitske 1          # Otto exactly 1 row above Tjitske
-  within Tjitske Otto 4         # at most 4 orthogonal steps apart
+  different_region Anna Pip
+  apart Luna Mauw               # different regions that do not share a side
+  above Otto Tjitske 1          # exactly 1 row above; omit n for anywhere above
   left_of Jos Otto
+  within Tjitske Otto 4         # at most 4 orthogonal steps apart
+  at_least Tim Pip 6            # at least 6 steps apart
+  alone Luna                    # nobody else in Luna's region
+  furthest Luna Mauw            # Luna is strictly further from Mauw than anyone
 ```
+
+`alone` and `furthest` expand to one relation per other person; `furthest`
+is a three-way relation (Luna, Mauw, that person).
 
 ## Layout
 
@@ -121,6 +135,6 @@ src/csp/
   murdoku.py     Murdoku compiler + renderer + clue vocabulary
   puzzlefile.py  reader for the sectioned Murdoku format
   cli.py         command line
-examples/        sudoku_*.txt (graded by the rule they need), prrrdoku1.txt
+examples/        sudoku_*.txt (graded by the rule they need), prrrdoku1-3.txt
 tests/           test_solver.py
 ```

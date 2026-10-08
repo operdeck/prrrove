@@ -62,19 +62,18 @@ def load_board(text: str) -> tuple[Board, list[tuple[str, list[str]]]]:
 
     people = list(section["People"])
 
+    groups = {}
+    for line in section.get("Groups", []):
+        name, _, members = line.partition(":")
+        groups[name.strip()] = members.split()
+
     clues = []
     for line in section.get("Clues", []):
         parts = line.split()
         clues.append((parts[0], parts[1:]))
 
-    board = Board(size, grid, region_names, objects, people)
-
-    known = set(people)
-    for kind, args in clues:
-        who = [a for a in args[:2] if a in known or kind in ("in_region", "next_to")]
-        if args[0] not in known:
-            raise ValueError(f"clue {line!r} names unknown person {args[0]!r}")
-        if kind in ("same_region", "left_of", "above", "within") and args[1] not in known:
-            raise ValueError(f"clue mentions unknown person {args[1]!r}")
+    board = Board(size, grid, region_names, objects, people, groups)
+    for name, members in groups.items():
+        board.region_ids(members)
 
     return board, clues
