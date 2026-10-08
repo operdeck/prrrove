@@ -45,14 +45,12 @@ three literal model (see `test_subsumption_prunes_the_wider_constraint`).
 
 Candidates, roughly in order of value:
 
-- **Naked / hidden subsets** (pairs, triples). Hall's theorem: *k*
-  `EXACTLY_ONE` constraints whose live literals span exactly *k* mutually
-  exclusive slots. Needs a conflict notion — two literals conflict if they
-  share any constraint. This is the gap that most limits the current ladder.
-- **Fish (X-Wing, Swordfish).** The *k*-constraint generalisation of
-  subsumption: *k* `EXACTLY_ONE` constraints whose combined live literals are
-  covered by *k* others.
-- **Chains.** Build the implication graph over literals (eliminating *x*
+- ~~Naked / hidden subsets, Fish~~ — done as `rule_cover(k)`, the
+  *k*-constraint generalisation of subsumption. One rule covers all four
+  Sudoku patterns; only connected groups of anchors are searched. *k*=4
+  (quads, Jellyfish) is not in the ladder: no example needs it.
+- **Chains.** This is now the gap that most limits the ladder —
+  `sudoku_beyond.txt` stalls on it. Build the implication graph over literals (eliminating *x*
   forces *y* when some `EXACTLY_ONE` drops to one option) and look for
   contradictions.
 - **Bounded what-if.** Assign a literal, propagate on a copy, keep the
@@ -84,11 +82,18 @@ Numbers from actual runs, not estimates:
 | Puzzle | Result | Rules that fired |
 |---|---|---|
 | `sudoku_easy.txt` | solved, 52 iterations | `single` 51 |
+| `sudoku_pointing.txt` | solved, 60 iterations | `single` 57, `subsumption` 2 |
+| `sudoku_naked_pair.txt` | solved, 65 iterations | `single` 58, `subsumption` 4, `cover2` 2 |
+| `sudoku_hidden_pair.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `subsumption` 1 |
+| `sudoku_xwing.txt` | solved, 57 iterations | `single` 54, `cover2` 2 |
+| `sudoku_swordfish.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `cover3` 1 |
+| `sudoku_beyond.txt` | **stalls**, 13 iterations | `subsumption` 6, `single` 4, `cover2` 2 |
 | `prrrdoku1.txt` | solved, 88 iterations | `relations` 79, `single` 7, `subsumption` 1 |
 
-`sudoku_easy.txt` is easy enough that `single` alone finishes it; it does not
-exercise `subsumption`. A harder Sudoku requiring subsets would be a useful
-addition to `examples/`.
+The graded Sudokus were generated (random minimal puzzles, uniqueness checked
+by backtracking) and picked because each needs its rule: the tests remove the
+rule and assert the puzzle stalls. A single firing can unlock a whole puzzle,
+so the counts are small. `cover` never fires on `prrrdoku1.txt`.
 
 ## Known gaps
 

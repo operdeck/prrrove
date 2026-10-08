@@ -5,6 +5,7 @@ Prrrdoku.docx, so a wrong board transcription fails here rather than quietly
 solving some other puzzle.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -13,7 +14,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from csp import murdoku, sudoku
-from csp.core import Contradiction, Kind, Model, Solver, rule_single, rule_subsumption
+from csp.core import (
+    DEFAULT_RULES,
+    Contradiction,
+    Kind,
+    Model,
+    Solver,
+    rule_cover,
+    rule_single,
+    rule_subsumption,
+)
 from csp.puzzlefile import load_board
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
@@ -70,6 +80,38 @@ def test_subsumption_prunes_the_wider_constraint():
     assert not any(m.is_false(l) for l in inner)
 
 
+def _naked_pair_model():
+    """Cells x, y take {1, 2}; z takes 1-4, w {3, 4}; each digit used once."""
+    m = Model()
+    allowed = {"x": (1, 2), "y": (1, 2), "z": (1, 2, 3, 4), "w": (3, 4)}
+    lit = {(v, d): m.literal(v, d) for v, ds in allowed.items() for d in ds}
+    for v in allowed:
+        m.constrain(f"{v} picks one", Kind.EXACTLY_ONE, [l for (w, _), l in lit.items() if w == v], defines=v)
+    for d in (1, 2, 3, 4):
+        m.constrain(f"{d} used once", Kind.EXACTLY_ONE, [l for (_, e), l in lit.items() if e == d])
+    return m, lit
+
+
+def test_cover2_is_a_naked_pair():
+    m, lit = _naked_pair_model()
+    assert rule_subsumption(m) is False
+    assert rule_cover(2)(m) is True
+    assert m.is_false(lit["z", 1]) and m.is_false(lit["z", 2])
+    assert not m.is_false(lit["z", 3]) and not m.is_false(lit["z", 4])
+
+
+def test_cover_needs_disjoint_anchors():
+    """A1 and A2 share their literals, so they place one truth, not two."""
+    m = Model()
+    a, b, c = m.literal("p", 1), m.literal("p", 2), m.literal("q", 1)
+    m.constrain("A1", Kind.EXACTLY_ONE, [a, b])
+    m.constrain("A2", Kind.EXACTLY_ONE, [a, b])
+    m.constrain("B", Kind.AT_MOST_ONE, [a, c])
+    m.constrain("C", Kind.AT_MOST_ONE, [b])
+    assert rule_cover(2)(m) is False
+    assert not m.is_false(c)
+
+
 # --- sudoku ---------------------------------------------------------------
 
 
@@ -99,6 +141,82 @@ def test_sudoku_solves_to_a_valid_grid():
     assert all(
         grid[r][c] in (0, rows[r][c]) for r in range(9) for c in range(9)
     )
+
+
+def _backtrack(grid):
+    """Plain search, sharing no code with the engine: the independent answer."""
+    g = [row[:] for row in grid]
+
+    def fits(r, c, d):
+        br, bc = r - r % 3, c - c % 3
+        return (
+            d not in g[r]
+            and all(g[i][c] != d for i in range(9))
+            and all(g[br + i][bc + j] != d for i in range(3) for j in range(3))
+        )
+
+    def go(i):
+        if i == 81:
+            return True
+        r, c = divmod(i, 9)
+        if g[r][c]:
+            return go(i + 1)
+        for d in range(1, 10):
+            if fits(r, c, d):
+                g[r][c] = d
+                if go(i + 1):
+                    return True
+        g[r][c] = 0
+        return False
+
+    assert go(0)
+    return g
+
+
+def _without(*names):
+    return [(n, r) for n, r in DEFAULT_RULES if n not in names]
+
+
+FISH = r"(\d) once in (row|col) \d+"
+
+# file, the rules it cannot do without, and the deduction pattern it must show
+GRADED = [
+    ("sudoku_pointing.txt", ("subsumption", "cover2", "cover3"), "subsumption", r"once in box"),
+    ("sudoku_naked_pair.txt", ("cover2", "cover3"), "cover2", r"^r\dc\d holds one digit, r\dc\d holds one digit use up"),
+    ("sudoku_hidden_pair.txt", ("cover2", "cover3"), "cover2", r"^\d once in [a-z]+ [\d,]+, \d once in .* use up r\dc\d holds"),
+    ("sudoku_xwing.txt", ("cover2", "cover3"), "cover2", rf"^{FISH}, \1 once in \2 \d+ use up \1 once in (?!\2)"),
+    ("sudoku_swordfish.txt", ("cover3",), "cover3", rf"^{FISH}, \1 once in \2 \d+, \1 once in \2 \d+ use up \1 once in (?!\2)"),
+]
+
+
+@pytest.mark.parametrize("name, needs, rule, pattern", GRADED)
+def test_graded_sudoku_matches_independent_solution(name, needs, rule, pattern):
+    model, grid = sudoku.compile_puzzle((EXAMPLES / name).read_text())
+    result = Solver(model).solve()
+    assert result.solved
+    expected = _backtrack(grid)
+    assert all(
+        result.assignment[sudoku.cell_name(r, c)] == expected[r][c]
+        for r in range(9)
+        for c in range(9)
+    )
+    assert any(s.rule == rule and re.search(pattern, s.reason) for s in model.log)
+
+
+@pytest.mark.parametrize("name, needs, rule, pattern", GRADED)
+def test_graded_sudoku_stalls_without_its_rule(name, needs, rule, pattern):
+    model, _ = sudoku.compile_puzzle((EXAMPLES / name).read_text())
+    result = Solver(model, _without(*needs)).solve()
+    assert not result.solved and result.contradiction is None
+
+
+def test_beyond_the_ladder_stalls_honestly():
+    """Needs chains or what-if; the engine must stop, not guess or contradict."""
+    model, grid = sudoku.compile_puzzle((EXAMPLES / "sudoku_beyond.txt").read_text())
+    result = Solver(model).solve()
+    assert not result.solved and result.contradiction is None
+    expected = _backtrack(grid)
+    assert all(expected[int(v[1]) - 1][int(v[3]) - 1] == d for v, d in result.assignment.items())
 
 
 def test_sudoku_rejects_a_malformed_grid():

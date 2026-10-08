@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from . import murdoku, sudoku
-from .core import Solver, Step
+from .core import DEFAULT_RULES, Solver, Step
 from .puzzlefile import load_board
 
 
@@ -78,7 +78,7 @@ def main(argv=None) -> int:
         print(draw("As far as the rules go", set()))
         open_vars = [v for v in model.variables if v not in result.assignment]
         print(f"\n{len(open_vars)} undecided: {', '.join(open_vars)}")
-        print("needs a rule beyond single/relations/subsumption.")
+        print(f"needs a rule beyond {'/'.join(name for name, _ in DEFAULT_RULES)}.")
 
     print(f"\n{result.iterations} iterations, {len(model.log)} deductions logged")
     return 0 if result.solved else 1

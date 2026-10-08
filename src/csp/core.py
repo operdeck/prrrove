@@ -296,10 +296,100 @@ def rule_subsumption(model: Model) -> bool:
     return False
 
 
+def rule_cover(k: int) -> Callable[[Model], bool]:
+    """Subsumption over k constraints at once.
+
+    Let A1..Ak be EXACTLY_ONE with pairwise disjoint live sets, and B1..Bk be
+    other constraints whose live literals together contain every live literal
+    of the As. The As make k distinct literals true, each lying in some B.
+    The Bs hold at most k truths between them, so those k use up every B -
+    any B-literal outside the As is false.
+
+    In Sudoku, As as cells and Bs as digit-in-house give naked subsets;
+    swapped, hidden subsets; As as digit-in-row and Bs as digit-in-column
+    give X-Wing (k=2) and Swordfish (k=3). The rule sees none of that.
+
+    Only connected groups of As are tried: a disconnected group splits into
+    smaller groups that a lower k already finds.
+    """
+
+    def rule(model: Model) -> bool:
+        live = {
+            c.index: frozenset(model.live(c.index))
+            for c in model.constraints
+            if not model.satisfied(c.index)
+        }
+        anchors = [
+            ci for ci, lits in live.items()
+            if lits and model.constraints[ci].kind is Kind.EXACTLY_ONE
+        ]
+        anchor_set = set(anchors)
+
+        def covers(need: frozenset, used: tuple, excluded: frozenset):
+            if not need:
+                yield used
+                return
+            if len(used) == k:
+                return
+            for bi in model.constraints_of(min(need)):
+                if bi in excluded or bi in used or bi not in live:
+                    continue
+                yield from covers(need - live[bi], used + (bi,), excluded)
+
+        def neighbours(group: frozenset, union: frozenset, first: int) -> set[int]:
+            near: set[int] = set()
+            for lit in union:
+                for ci in model.constraints_of(lit):
+                    for other in live.get(ci, ()):
+                        near.update(model.constraints_of(other))
+            return {
+                ci for ci in near
+                if ci in anchor_set and ci > first and ci not in group
+                and not (live[ci] & union)
+            }
+
+        seen: set[frozenset] = set()
+
+        def grow(group: frozenset, union: frozenset, first: int) -> bool:
+            if group in seen:
+                return False
+            seen.add(group)
+            if next(covers(union, (), group), None) is None:
+                return False
+            if len(group) == k:
+                for bs in covers(union, (), group):
+                    extra = set().union(*(live[b] for b in bs)) - union
+                    if extra:
+                        a_names = ", ".join(model.constraints[a].name for a in sorted(group))
+                        b_names = ", ".join(model.constraints[b].name for b in bs)
+                        for lit in sorted(extra):
+                            model.eliminate(
+                                lit,
+                                f"cover{k}",
+                                f"{a_names} use up {b_names}",
+                            )
+                        return True
+                return False
+            for ci in sorted(neighbours(group, union, first)):
+                if grow(group | {ci}, union | live[ci], first):
+                    return True
+            return False
+
+        for a in anchors:
+            if grow(frozenset([a]), live[a], a):
+                return True
+        return False
+
+    rule.__name__ = f"rule_cover{k}"
+    return rule
+
+
 DEFAULT_RULES: list[tuple[str, Callable[[Model], bool]]] = [
     ("single", rule_single),
     ("relations", rule_relations),
     ("subsumption", rule_subsumption),
+    ("cover2", rule_cover(2)),
+    ("cover3", rule_cover(3)),
 ]
 
 

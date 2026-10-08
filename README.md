@@ -56,25 +56,36 @@ Applied cheapest-first; any success restarts the ladder.
 | `single` | An `EXACTLY_ONE` with one option left forces it. |
 | `relations` | Arc consistency: drop a choice with no surviving partner. |
 | `subsumption` | If `live(A) ⊆ live(B)` and A is `EXACTLY_ONE`, every B-literal outside A is false. |
+| `cover2`, `cover3` | The same over *k* constraints: *k* disjoint `EXACTLY_ONE`s whose live literals fit inside *k* others use those others up. |
 
 `single` covers Sudoku's naked single *and* hidden single with no
 special-casing — they are the same statement about different constraints
 ("this cell holds one digit" vs "this digit sits once in this row").
 `subsumption` is likewise pointing-pairs and box/line reduction at once.
 
-Not implemented: naked/hidden subsets beyond subsumption (pairs, triples),
-Fish/X-Wing, chains, bounded what-if. See `AGENT.md`.
+`cover`*k* is naked subsets (As are cells), hidden subsets (As are
+digit-in-house), X-Wing (*k*=2) and Swordfish (*k*=3) (As are digit-in-row,
+Bs digit-in-column) — one rule, again with no special-casing.
+
+Not implemented: chains, bounded what-if. See `AGENT.md`.
 
 ## Verification
 
 ```bash
-uv run --with pytest pytest tests/ -q      # 16 tests
+uv run --with pytest pytest tests/ -q      # 29 tests
 ```
 
 Correctness is checked against ground truth, not self-consistency:
 
 - Sudoku's solution is re-validated independently — every row, column and box
   is a permutation of 1-9, and every given survives.
+- The graded Sudokus (`sudoku_pointing`, `_naked_pair`, `_hidden_pair`,
+  `_xwing`, `_swordfish`) are compared cell by cell against a plain
+  backtracking search that shares no code with the engine. Each must also
+  show its named pattern in the log, and must stall when its rule is removed,
+  so the example really exercises that rung of the ladder.
+- `sudoku_beyond.txt` needs more than the ladder has; the test checks the
+  engine stops without a contradiction and every cell it did fill is right.
 - Prrrdoku 1 is checked against the published solution in `Prrrdoku.docx`, and
   the post-clue candidate lists are compared against the four lists quoted in
   that document's own worked solution. A mis-transcribed board fails the tests
@@ -110,6 +121,6 @@ src/csp/
   murdoku.py     Murdoku compiler + renderer + clue vocabulary
   puzzlefile.py  reader for the sectioned Murdoku format
   cli.py         command line
-examples/        sudoku_easy.txt, prrrdoku1.txt
+examples/        sudoku_*.txt (graded by the rule they need), prrrdoku1.txt
 tests/           test_solver.py
 ```
