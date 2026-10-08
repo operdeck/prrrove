@@ -8,6 +8,8 @@ of Sudoku:
   * ... each 3x3 box
 """
 
+from collections.abc import Collection
+
 from .core import Kind, Model
 
 SIZE = 9
@@ -15,18 +17,19 @@ BOX = 3
 BLUE = "\033[94m"
 RESET = "\033[0m"
 
+type Grid = list[list[int]]
+
 
 def cell_name(row: int, col: int) -> str:
     """1-indexed, matching what the grid prints."""
     return f"r{row + 1}c{col + 1}"
 
 
-def parse(text: str) -> list[list[int]]:
-    """Read a 9x9 grid. Digits are givens; '.' and '0' are blanks."""
+def parse(text: str) -> Grid:
+    """Read a 9x9 grid. Digits are givens; '.' and '0' are blanks; anything
+    else, such as '|' and '-' separators, is ignored."""
     grid = []
     for line in text.strip().splitlines():
-        if set(line.strip()) <= set("-+|  "):
-            continue
         row = [0 if ch in ".0" else int(ch) for ch in line if ch in ".0123456789"]
         if not row:
             continue
@@ -38,7 +41,8 @@ def parse(text: str) -> list[list[int]]:
     return grid
 
 
-def compile_puzzle(text: str) -> tuple[Model, list[list[int]]]:
+def compile_puzzle(text: str) -> tuple[Model, Grid]:
+    """The model for a Sudoku, with its givens already assigned, and the grid read."""
     grid = parse(text)
     model = Model()
 
@@ -76,9 +80,7 @@ def compile_puzzle(text: str) -> tuple[Model, list[list[int]]]:
                     for r in range(BOX)
                     for c in range(BOX)
                 ]
-                model.constrain(
-                    f"{d} once in box {br + 1},{bc + 1}", Kind.EXACTLY_ONE, members
-                )
+                model.constrain(f"{d} once in box {br + 1},{bc + 1}", Kind.EXACTLY_ONE, members)
 
     for row, col in cells:
         given = grid[row][col]
@@ -89,7 +91,7 @@ def compile_puzzle(text: str) -> tuple[Model, list[list[int]]]:
     return model, grid
 
 
-def render(model: Model, title: str, highlight: set[str] = frozenset()) -> str:
+def render(model: Model, title: str, highlight: Collection[str] = frozenset()) -> str:
     """Draw the grid, colouring the cells named in `highlight`."""
     rule = "  +------+------+------+"
     out = [f"\n{title}", rule]
@@ -112,8 +114,3 @@ def render(model: Model, title: str, highlight: set[str] = frozenset()) -> str:
     out.append(rule)
     out.append("  |1 2 3 |4 5 6 |7 8 9 |")
     return "\n".join(out)
-
-
-def touched_cells(steps) -> set[str]:
-    """Cell names newly decided by a batch of log steps."""
-    return {s.literal.split("=")[0] for s in steps if s.asserted}

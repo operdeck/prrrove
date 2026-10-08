@@ -6,12 +6,9 @@ solving some other puzzle.
 """
 
 import re
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from csp import murdoku, sudoku
 from csp.core import (
@@ -19,6 +16,7 @@ from csp.core import (
     Contradiction,
     Kind,
     Model,
+    Rule,
     Solver,
     rule_cover,
     rule_relations,
@@ -26,7 +24,7 @@ from csp.core import (
     rule_subsumption,
     rule_what_if,
 )
-from csp.puzzlefile import load_board
+from csp.puzzlefile import load_board, parse_square
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 
@@ -78,20 +76,27 @@ def test_subsumption_prunes_the_wider_constraint():
     m.constrain("narrow", Kind.EXACTLY_ONE, inner)
     m.constrain("wide", Kind.EXACTLY_ONE, inner + extra)
     assert rule_subsumption(m) is True
-    assert all(m.is_false(l) for l in extra)
-    assert not any(m.is_false(l) for l in inner)
+    assert all(m.is_false(lit) for lit in extra)
+    assert not any(m.is_false(lit) for lit in inner)
+
+
+def _variable(m: Model, var: str, values) -> list[int]:
+    """Declare `var` with the given domain; return its literals."""
+    lits = [m.literal(var, v) for v in values]
+    m.constrain(f"{var} picks one", Kind.EXACTLY_ONE, lits, defines=var)
+    return lits
 
 
 def _naked_pair_model():
     """Cells x, y take {1, 2}; z takes 1-4, w {3, 4}; each digit used once."""
     m = Model()
     allowed = {"x": (1, 2), "y": (1, 2), "z": (1, 2, 3, 4), "w": (3, 4)}
-    lit = {(v, d): m.literal(v, d) for v, ds in allowed.items() for d in ds}
-    for v in allowed:
-        m.constrain(f"{v} picks one", Kind.EXACTLY_ONE, [l for (w, _), l in lit.items() if w == v], defines=v)
+    for var, values in allowed.items():
+        _variable(m, var, values)
     for d in (1, 2, 3, 4):
-        m.constrain(f"{d} used once", Kind.EXACTLY_ONE, [l for (_, e), l in lit.items() if e == d])
-    return m, lit
+        holders = [m.literal(var, d) for var, values in allowed.items() if d in values]
+        m.constrain(f"{d} used once", Kind.EXACTLY_ONE, holders)
+    return m, {(var, d): m.literal(var, d) for var, values in allowed.items() for d in values}
 
 
 def test_cover2_is_a_naked_pair():
@@ -116,29 +121,28 @@ def test_cover_needs_disjoint_anchors():
 
 def test_three_way_relation_needs_a_supporting_combination():
     m = Model()
-    for v in "abc":
-        m.constrain(f"{v} picks one", Kind.EXACTLY_ONE, [m.literal(v, d) for d in (1, 2, 3)], defines=v)
+    for var in "abc":
+        _variable(m, var, (1, 2, 3))
     m.relate("a is the sum", "abc", lambda a, b, c: a == b + c)
     while rule_relations(m):
         pass
-    assert [m.value_of(l) for l in m.options("a")] == [2, 3]
-    assert [m.value_of(l) for l in m.options("b")] == [1, 2]
+    assert [m.value_of(lit) for lit in m.options("a")] == [2, 3]
+    assert [m.value_of(lit) for lit in m.options("b")] == [1, 2]
 
 
 def test_clone_leaves_the_original_untouched():
     m = Model()
-    a, b = m.literal("x", 1), m.literal("x", 2)
-    m.constrain("x picks one", Kind.EXACTLY_ONE, [a, b], defines="x")
+    a, b = _variable(m, "x", (1, 2))
     twin = m.clone()
     twin.assign(a, "test", "chosen")
     assert twin.is_false(b) and not m.is_false(b) and m.log == []
 
 
 def test_what_if_eliminates_a_literal_that_leads_to_contradiction():
-    """x=1 forces y=1 by relation, but y=1 is barred by an at-most-one with z=1."""
+    """x=1 forces both y=1 and z=1, which may not hold together."""
     m = Model()
-    for v in "xyz":
-        m.constrain(f"{v} picks one", Kind.EXACTLY_ONE, [m.literal(v, d) for d in (1, 2)], defines=v)
+    for var in "xyz":
+        _variable(m, var, (1, 2))
     m.relate("y follows x", "xy", lambda x, y: x != 1 or y == 1)
     m.relate("y avoids z", "yz", lambda y, z: y != 1 or z != 1)
     m.relate("z follows x", "xz", lambda x, z: x != 1 or z == 1)
@@ -151,8 +155,8 @@ def test_what_if_eliminates_a_literal_that_leads_to_contradiction():
 
 
 def test_sudoku_model_shape():
-    model, grid = sudoku.compile_puzzle((EXAMPLES / "sudoku_easy.txt").read_text())
-    assert len(model._literals) == 81 * 9
+    model, _ = sudoku.compile_puzzle((EXAMPLES / "sudoku_easy.txt").read_text())
+    assert model.num_literals == 81 * 9
     assert len(model.constraints) == 81 + 3 * 81
     assert model.chosen("r1c1") == 5
     assert model.chosen("r1c3") is None
@@ -173,9 +177,7 @@ def test_sudoku_solves_to_a_valid_grid():
         for bc in range(3)
     )
     # every given survived
-    assert all(
-        grid[r][c] in (0, rows[r][c]) for r in range(9) for c in range(9)
-    )
+    assert all(grid[r][c] in (0, rows[r][c]) for r in range(9) for c in range(9))
 
 
 def _backtrack(grid):
@@ -208,20 +210,22 @@ def _backtrack(grid):
     return g
 
 
-def _before(rule):
-    names = [n for n, _ in DEFAULT_RULES]
+def _before(rule: str) -> tuple[Rule, ...]:
+    names = [r.name for r in DEFAULT_RULES]
     return DEFAULT_RULES[: names.index(rule)]
 
 
-FISH = r"(\d) once in (row|col) \d+"
+FISH = r"(\d) once in (row|col) \d+"  # a digit in one line; \1 digit, \2 row or col
+LINE = r"once in \2 \d+"  # the same digit in another line of the same kind
+HOUSE = r"\d once in [a-z]+ [\d,]+"  # any digit in any row, column or box
 
 # file, the rule it needs, and the deduction pattern it must show
 GRADED = [
     ("sudoku_pointing.txt", "subsumption", r"once in box"),
     ("sudoku_naked_pair.txt", "cover2", r"^r\dc\d holds one digit, r\dc\d holds one digit use up"),
-    ("sudoku_hidden_pair.txt", "cover2", r"^\d once in [a-z]+ [\d,]+, \d once in .* use up r\dc\d holds"),
-    ("sudoku_xwing.txt", "cover2", rf"^{FISH}, \1 once in \2 \d+ use up \1 once in (?!\2)"),
-    ("sudoku_swordfish.txt", "cover3", rf"^{FISH}, \1 once in \2 \d+, \1 once in \2 \d+ use up \1 once in (?!\2)"),
+    ("sudoku_hidden_pair.txt", "cover2", rf"^{HOUSE}, {HOUSE} use up r\dc\d holds"),
+    ("sudoku_xwing.txt", "cover2", rf"^{FISH}, \1 {LINE} use up \1 once in (?!\2)"),
+    ("sudoku_swordfish.txt", "cover3", rf"^{FISH}, \1 {LINE}, \1 {LINE} use up \1 once in (?!\2)"),
     ("sudoku_what_if.txt", "what_if", r"^assuming it leads"),
 ]
 
@@ -266,7 +270,7 @@ def test_people_are_the_variables(prrrdoku1):
     assert sorted(model.variables) == sorted(board.people)
     # 7 people x 43 free squares
     assert len(board.free) == 49 - 6
-    assert len(model._literals) == 7 * 43
+    assert model.num_literals == 7 * 43
 
 
 def test_clue_filtering_matches_the_published_candidate_lists(prrrdoku1):
@@ -280,7 +284,7 @@ def test_clue_filtering_matches_the_published_candidate_lists(prrrdoku1):
 
 
 def test_prrrdoku1_reaches_the_published_solution(prrrdoku1):
-    board, model = prrrdoku1
+    _, model = prrrdoku1
     result = Solver(model).solve()
     assert result.solved
     assert {p: str(sq) for p, sq in result.assignment.items()} == {
@@ -328,6 +332,27 @@ def test_people_count_must_match_board_size():
         murdoku.Board(3, [[0] * 3] * 3, {0: "a"}, {}, ["only", "two"])
 
 
+def test_parse_square_rejects_garbage():
+    assert parse_square("R2C5") == murdoku.Square(1, 4)
+    with pytest.raises(ValueError):
+        parse_square("r2x5")
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in EXAMPLES.glob("*.txt")))
+def test_every_step_is_logged_under_its_rule_name(name):
+    """Narration groups steps by rule, so the names in the log must match the ladder."""
+    text = (EXAMPLES / name).read_text()
+    if "Regions:" in text:
+        model = murdoku.compile_puzzle(*load_board(text))
+    else:
+        model, _ = sudoku.compile_puzzle(text)
+    fired: list[tuple[str, set[str]]] = []
+    Solver(model).solve(on_step=lambda rule, steps: fired.append((rule, {s.rule for s in steps})))
+    assert fired
+    for rule, logged in fired:
+        assert logged == {rule}
+
+
 # --- prrrdoku 2 and 3 -----------------------------------------------------
 
 
@@ -353,7 +378,9 @@ def test_prrrdoku2_region_borders_match_the_document():
     """'De speeltuin grenst aan het klimgebied, de keukenwinkel, het cafe en de kampeerplek.'"""
     board, _ = _load("prrrdoku2.txt")
     speeltuin = board.region_id("speeltuin")
-    touching = {board.region_names[r] for r in board.region_names if board.regions_touch(speeltuin, r)}
+    touching = {
+        name for rid, name in board.region_names.items() if board.regions_touch(speeltuin, rid)
+    }
     assert touching == {"klimgebied", "keukenwinkel", "cafe", "kampeerplek"}
 
 
@@ -368,14 +395,34 @@ def test_prrrdoku3_candidate_lists_match_the_document():
 
 PUBLISHED = {
     "prrrdoku2.txt": (
-        {"Jos": "r1c4", "Pip": "r2c8", "Tim": "r3c2", "Anna": "r4c7", "Vladimir": "r5c5",
-         "Tjitske": "r6c1", "Otto": "r7c6", "Luna": "r8c3", "Mauw": "r9c9"},
-        "cafe", ["Otto"],
+        {
+            "Jos": "r1c4",
+            "Pip": "r2c8",
+            "Tim": "r3c2",
+            "Anna": "r4c7",
+            "Vladimir": "r5c5",
+            "Tjitske": "r6c1",
+            "Otto": "r7c6",
+            "Luna": "r8c3",
+            "Mauw": "r9c9",
+        },
+        "cafe",
+        ["Otto"],
     ),
     "prrrdoku3.txt": (
-        {"Mauw": "r1c4", "Otto": "r2c1", "Tim": "r3c7", "Vladimir": "r4c3", "Jos": "r5c8",
-         "Anna": "r6c6", "Pip": "r7c5", "Luna": "r8c9", "Tjitske": "r9c2"},
-        "speeltuin", ["Pip"],
+        {
+            "Mauw": "r1c4",
+            "Otto": "r2c1",
+            "Tim": "r3c7",
+            "Vladimir": "r4c3",
+            "Jos": "r5c8",
+            "Anna": "r6c6",
+            "Pip": "r7c5",
+            "Luna": "r8c9",
+            "Tjitske": "r9c2",
+        },
+        "speeltuin",
+        ["Pip"],
     ),
 }
 
@@ -389,8 +436,11 @@ def test_later_prrrdokus_reach_the_published_solution(name):
     assert {p: str(sq) for p, sq in result.assignment.items()} == solution
     region = board.region_of(result.assignment["Vladimir"])
     assert board.region_names[region] == vlad_region
-    assert [p for p, sq in result.assignment.items()
-            if p != "Vladimir" and board.region_of(sq) == region] == company
+    assert [
+        p
+        for p, sq in result.assignment.items()
+        if p != "Vladimir" and board.region_of(sq) == region
+    ] == company
 
 
 def test_prrrdoku2_needs_what_if():

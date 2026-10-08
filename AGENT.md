@@ -37,11 +37,29 @@ find yourself importing a renderer into core, the callback is what you want.
 `examples/`. Prove it before adding it. `rule_subsumption` carries its proof
 in the docstring; follow that pattern.
 
+**Only `core` touches model internals.** Puzzle modules, the CLI and the
+tests use the public `Model` API (`literal`, `constrain`, `relate`, the
+inspection methods, `assign`/`eliminate`). Renderers learn what changed from
+`Step.var`/`Step.value`, never by parsing strings.
+
+## Interfaces
+
+| Boundary | Contract |
+|---|---|
+| puzzle module -> engine | `compile_puzzle(...) -> Model` |
+| engine -> rules | `Rule(name, apply)`, `apply(model) -> bool`; log every deduction under `name` |
+| engine -> caller | `Solver(model, rules).solve(on_step) -> Result` |
+| progress | `on_step(rule_name, steps)` after each rule that fires |
+| CLI -> puzzle | `cli.load(text, kind) -> Puzzle(kind, model, draw)` |
+
 ## Adding a rule
 
-Write `fn(model) -> bool` in `core.py`, add it to `DEFAULT_RULES` in
-cost order, and add a unit test that exercises it on a hand-built two or
-three literal model (see `test_subsumption_prunes_the_wider_constraint`).
+Write `rule_x(model) -> bool` in `core.py`, add `Rule("x", rule_x)` to
+`DEFAULT_RULES` in cost order, and add a unit test that exercises it on a
+hand-built model of a few literals (see
+`test_subsumption_prunes_the_wider_constraint`).
+`test_every_step_is_logged_under_its_rule_name` fails if the name passed to
+`assign`/`eliminate` does not match the `Rule` name.
 
 Candidates, roughly in order of value:
 
@@ -69,9 +87,9 @@ than listing it as working.
    cell-centric shape produced an unsatisfiable model.
 3. Express every rule as `EXACTLY_ONE` / `AT_MOST_ONE` sets, plus relations
    (over two or more variables) for clues that link people.
-4. A `render(...) -> str` function, and a `touched_*(steps)` helper returning
-   the names to highlight.
-5. Wire into `cli.detect` and `cli.main`.
+4. A `render(..., title, highlight) -> str` function; `highlight` is a set
+   of variable names.
+5. Wire into `cli.detect` and `cli.load`.
 6. Test against an **independent** source of truth — a published solution, or
    a property check (permutation, givens preserved). Self-consistency is not
    verification.

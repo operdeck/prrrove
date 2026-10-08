@@ -1,15 +1,18 @@
 """Reader for the sectioned puzzle-file format used by Murdoku boards.
 
-A file is a series of `Section:` headers followed by indented-free lines.
-Blank lines and `#` comments are ignored everywhere.
+A file is a series of `Section:` headers, each followed by its lines. A
+one-line section can be written inline before the first header, as in
+`Size: 7`. Blank lines and `#` comments are ignored everywhere.
 """
 
-from .murdoku import Board, Square
+import re
+
+from .murdoku import Board, Clue, Square
 
 
 def _sections(text: str) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
-    current = None
+    current: str | None = None
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -28,14 +31,14 @@ def _sections(text: str) -> dict[str, list[str]]:
 
 def parse_square(token: str) -> Square:
     """'r2c5' -> Square(1, 4)."""
-    body = token.strip().lower()
-    if not body.startswith("r") or "c" not in body:
+    match = re.fullmatch(r"r(\d+)c(\d+)", token.strip().lower())
+    if match is None:
         raise ValueError(f"bad square {token!r}, expected like r2c5")
-    row, _, col = body[1:].partition("c")
-    return Square(int(row) - 1, int(col) - 1)
+    return Square(int(match[1]) - 1, int(match[2]) - 1)
 
 
-def load_board(text: str) -> tuple[Board, list[tuple[str, list[str]]]]:
+def load_board(text: str) -> tuple[Board, list[Clue]]:
+    """Read a Murdoku puzzle file into its board and its list of clues."""
     section = _sections(text)
     for required in ("Size", "Regions", "Grid", "People"):
         if required not in section:
@@ -67,13 +70,11 @@ def load_board(text: str) -> tuple[Board, list[tuple[str, list[str]]]]:
         name, _, members = line.partition(":")
         groups[name.strip()] = members.split()
 
-    clues = []
+    clues: list[Clue] = []
     for line in section.get("Clues", []):
-        parts = line.split()
-        clues.append((parts[0], parts[1:]))
+        kind, *args = line.split()
+        clues.append((kind, args))
 
     board = Board(size, grid, region_names, objects, people, groups)
-    for name, members in groups.items():
-        board.region_ids(members)
-
+    board.region_ids(groups)  # fails now, not mid-solve, if a group names an unknown region
     return board, clues

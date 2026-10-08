@@ -16,10 +16,10 @@ kitchen") or become relations between two or three people ("Jos is left of
 Otto", "Luna is furthest from Mauw").
 """
 
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
 
-from .core import Kind, Model
+from .core import Kind, LiteralId, Model
 
 RESET = "\033[0m"
 BOLD = "\033[1m"
@@ -50,12 +50,16 @@ def steps_between(a: Square, b: Square) -> int:
 
 @dataclass
 class Board:
+    """The fixed layout: regions, objects, and who is playing."""
+
     size: int
     regions: list[list[int]]
     region_names: dict[int, str]
     objects: dict[str, Square]
     people: list[str]
     groups: dict[str, list[str]] = field(default_factory=dict)
+    free: list[Square] = field(init=False)
+    borders: set[frozenset[int]] = field(init=False)
 
     def __post_init__(self) -> None:
         if len(self.people) != self.size:
@@ -63,21 +67,17 @@ class Board:
                 f"{len(self.people)} people on a {self.size}x{self.size} board; "
                 "one per row and column means these must match"
             )
+        squares = [Square(r, c) for r in range(self.size) for c in range(self.size)]
         occupied = set(self.objects.values())
-        self.free = [
-            Square(r, c)
-            for r in range(self.size)
-            for c in range(self.size)
-            if Square(r, c) not in occupied
-        ]
-        self.borders: set[frozenset[int]] = set()
-        for r in range(self.size):
-            for c in range(self.size):
-                for dr, dc in ((0, 1), (1, 0)):
-                    if r + dr < self.size and c + dc < self.size:
-                        a, b = self.regions[r][c], self.regions[r + dr][c + dc]
-                        if a != b:
-                            self.borders.add(frozenset((a, b)))
+        self.free = [sq for sq in squares if sq not in occupied]
+        self.borders = {
+            frozenset((self.region_of(sq), self.region_of(nb)))
+            for sq in squares
+            for nb in (Square(sq.row, sq.col + 1), Square(sq.row + 1, sq.col))
+            if nb.row < self.size
+            and nb.col < self.size
+            and self.region_of(sq) != self.region_of(nb)
+        }
 
     def region_of(self, square: Square) -> int:
         return self.regions[square.row][square.col]
@@ -88,73 +88,116 @@ class Board:
                 return rid
         raise ValueError(f"unknown region {name!r}; have {sorted(self.region_names.values())}")
 
-    def region_ids(self, names) -> set[int]:
+    def region_ids(self, names: Iterable[str]) -> set[int]:
         """Region ids for a mix of region names and group names."""
-        ids: set[int] = set()
-        for name in names:
-            members = self.groups.get(name, [name])
-            ids.update(self.region_id(m) for m in members)
-        return ids
+        return {
+            self.region_id(member) for name in names for member in self.groups.get(name, [name])
+        }
 
     def regions_touch(self, a: int, b: int) -> bool:
         """Share a side somewhere; a shared corner does not count."""
         return frozenset((a, b)) in self.borders
 
+    def object_at(self, name: str) -> Square:
+        if name not in self.objects:
+            raise ValueError(f"unknown object {name!r}; have {sorted(self.objects)}")
+        return self.objects[name]
+
 
 # --- clue vocabulary ------------------------------------------------------
-# Each entry either filters one person's squares, or relates two people.
+# A filter narrows one person's squares; a relation links two people's.
+# Each builder takes the board plus the clue's extra words.
 
-FILTERS: dict[str, Callable[..., Callable[[Square], bool]]] = {
-    # in_region <person> <region or group>...   in any of them
-    "in_region": lambda board, *names: (
-        lambda sq, ids=board.region_ids(names): board.region_of(sq) in ids
-    ),
-    # outside <person> <region or group>...     in none of them
-    "outside": lambda board, *names: (
-        lambda sq, ids=board.region_ids(names): board.region_of(sq) not in ids
-    ),
-    # next_to <person> <object>
-    "next_to": lambda board, obj: (
-        lambda sq: steps_between(sq, board.objects[obj]) == 1
-    ),
+type Clue = tuple[str, list[str]]
+type SquareTest = Callable[[Square], bool]
+type PairTest = Callable[[Square, Square], bool]
+
+
+def _in_region(board: Board, *names: str) -> SquareTest:
+    ids = board.region_ids(names)
+    return lambda sq: board.region_of(sq) in ids
+
+
+def _outside(board: Board, *names: str) -> SquareTest:
+    ids = board.region_ids(names)
+    return lambda sq: board.region_of(sq) not in ids
+
+
+def _next_to(board: Board, obj: str) -> SquareTest:
+    target = board.object_at(obj)
+    return lambda sq: steps_between(sq, target) == 1
+
+
+def _same_region(board: Board) -> PairTest:
+    return lambda a, b: board.region_of(a) == board.region_of(b)
+
+
+def _different_region(board: Board) -> PairTest:
+    return lambda a, b: board.region_of(a) != board.region_of(b)
+
+
+def _apart(board: Board) -> PairTest:
+    def test(a: Square, b: Square) -> bool:
+        ra, rb = board.region_of(a), board.region_of(b)
+        return ra != rb and not board.regions_touch(ra, rb)
+
+    return test
+
+
+def _left_of(board: Board) -> PairTest:
+    return lambda a, b: a.col < b.col
+
+
+def _above(board: Board, rows: str | None = None) -> PairTest:
+    if rows is None:
+        return lambda a, b: a.row < b.row
+    gap = int(rows)
+    return lambda a, b: a.row + gap == b.row
+
+
+def _within(board: Board, steps: str) -> PairTest:
+    limit = int(steps)
+    return lambda a, b: steps_between(a, b) <= limit
+
+
+def _at_least(board: Board, steps: str) -> PairTest:
+    limit = int(steps)
+    return lambda a, b: steps_between(a, b) >= limit
+
+
+FILTERS: dict[str, Callable[..., SquareTest]] = {
+    "in_region": _in_region,  # in_region <person> <region or group>...
+    "outside": _outside,  # outside <person> <region or group>...
+    "next_to": _next_to,  # next_to <person> <object>
 }
 
-RELATIONS: dict[str, Callable[..., Callable[[Square, Square], bool]]] = {
-    # same_region <a> <b>
-    "same_region": lambda board: (
-        lambda a, b: board.region_of(a) == board.region_of(b)
-    ),
-    # different_region <a> <b>
-    "different_region": lambda board: (
-        lambda a, b: board.region_of(a) != board.region_of(b)
-    ),
-    # apart <a> <b>          different regions that do not border each other
-    "apart": lambda board: (
-        lambda a, b: board.region_of(a) != board.region_of(b)
-        and not board.regions_touch(board.region_of(a), board.region_of(b))
-    ),
-    # left_of <a> <b>        a is somewhere left of b
-    "left_of": lambda board: (lambda a, b: a.col < b.col),
-    # above <a> <b> [n]      a is exactly n rows above b, or anywhere above
-    "above": lambda board, n=None: (
-        (lambda a, b: a.row < b.row) if n is None
-        else (lambda a, b: a.row + int(n) == b.row)
-    ),
-    # within <a> <b> <n>     at most n steps apart
-    "within": lambda board, n: (lambda a, b: steps_between(a, b) <= int(n)),
-    # at_least <a> <b> <n>   at least n steps apart
-    "at_least": lambda board, n: (lambda a, b: steps_between(a, b) >= int(n)),
+RELATIONS: dict[str, Callable[..., PairTest]] = {
+    "same_region": _same_region,  # same_region <a> <b>
+    "different_region": _different_region,  # different_region <a> <b>
+    "apart": _apart,  # apart <a> <b>: different regions that do not border
+    "left_of": _left_of,  # left_of <a> <b>: a somewhere left of b
+    "above": _above,  # above <a> <b> [n]: exactly n rows above, or anywhere above
+    "within": _within,  # within <a> <b> <n>: at most n steps apart
+    "at_least": _at_least,  # at_least <a> <b> <n>: at least n steps apart
 }
 
-# Clues that expand into one relation per other person.
-#   alone <a>          nobody else in a's region
-#   furthest <a> <b>   a is strictly further from b than anyone else is
-GROUP_CLUES = {"alone": 1, "furthest": 2}
+# Clues about everyone else, expanded to one relation per other person.
+GROUP_CLUES = {
+    "alone": 1,  # alone <a>: nobody else in a's region
+    "furthest": 2,  # furthest <a> <b>: a strictly further from b than anyone
+}
 
 
-def compile_puzzle(board: Board, clues: list[tuple[str, list[str]]]) -> Model:
+def compile_puzzle(board: Board, clues: Iterable[Clue]) -> Model:
+    """The model for a Murdoku board and its clues."""
     model = Model()
+    _add_board_rules(model, board)
+    for kind, args in clues:
+        _add_clue(model, board, kind, args)
+    return model
 
+
+def _add_board_rules(model: Model, board: Board) -> None:
     for person in board.people:
         model.constrain(
             f"{person} stands somewhere",
@@ -162,76 +205,71 @@ def compile_puzzle(board: Board, clues: list[tuple[str, list[str]]]) -> Model:
             [model.literal(person, sq) for sq in board.free],
             defines=person,
         )
-
     for sq in board.free:
         model.constrain(
             f"{sq} holds at most one",
             Kind.AT_MOST_ONE,
             [model.literal(p, sq) for p in board.people],
         )
-
-    for r in range(board.size):
-        row_squares = [sq for sq in board.free if sq.row == r]
+    for i in range(board.size):
         model.constrain(
-            f"row {r + 1} holds one person",
+            f"row {i + 1} holds one person",
             Kind.EXACTLY_ONE,
-            [model.literal(p, sq) for p in board.people for sq in row_squares],
+            _anyone_on(model, board, [sq for sq in board.free if sq.row == i]),
         )
-    for c in range(board.size):
-        col_squares = [sq for sq in board.free if sq.col == c]
+    for i in range(board.size):
         model.constrain(
-            f"col {c + 1} holds one person",
+            f"col {i + 1} holds one person",
             Kind.EXACTLY_ONE,
-            [model.literal(p, sq) for p in board.people for sq in col_squares],
+            _anyone_on(model, board, [sq for sq in board.free if sq.col == i]),
         )
 
-    for kind, args in clues:
-        if kind in FILTERS:
-            arity = 1
-        elif kind in RELATIONS:
-            arity = 2
-        elif kind in GROUP_CLUES:
-            arity = GROUP_CLUES[kind]
-        else:
-            raise ValueError(f"unknown clue {kind!r}")
-        for who in args[:arity]:
-            if who not in board.people:
-                raise ValueError(f"clue {kind} {' '.join(args)} names unknown person {who!r}")
 
-        if kind in FILTERS:
-            person, rest = args[0], args[1:]
-            allowed = FILTERS[kind](board, *rest)
-            label = " ".join([kind, *rest])
-            for sq in board.free:
-                if not allowed(sq):
-                    model.eliminate(model.literal(person, sq), "clue", label)
-        elif kind in RELATIONS:
-            a, b, rest = args[0], args[1], args[2:]
-            model.relate(
-                " ".join([a, kind, b, *rest]), (a, b), RELATIONS[kind](board, *rest)
-            )
-        elif kind == "alone":
-            a = args[0]
-            differ = RELATIONS["different_region"](board)
-            for p in board.people:
-                if p != a:
-                    model.relate(f"{a} alone in region, so not with {p}", (a, p), differ)
-        elif kind == "furthest":
-            a, b = args
-            further = lambda sa, sb, sp: steps_between(sa, sb) > steps_between(sp, sb)
-            for p in board.people:
-                if p not in (a, b):
-                    model.relate(f"{a} further from {b} than {p}", (a, b, p), further)
+def _anyone_on(model: Model, board: Board, squares: list[Square]) -> list[LiteralId]:
+    return [model.literal(p, sq) for p in board.people for sq in squares]
 
-    return model
+
+def _add_clue(model: Model, board: Board, kind: str, args: list[str]) -> None:
+    arity = 1 if kind in FILTERS else 2 if kind in RELATIONS else GROUP_CLUES.get(kind)
+    if arity is None:
+        raise ValueError(f"unknown clue {kind!r}")
+    for who in args[:arity]:
+        if who not in board.people:
+            raise ValueError(f"clue {kind} {' '.join(args)} names unknown person {who!r}")
+
+    if kind in FILTERS:
+        person, *rest = args
+        allowed = FILTERS[kind](board, *rest)
+        label = " ".join([kind, *rest])
+        for sq in board.free:
+            if not allowed(sq):
+                model.eliminate(model.literal(person, sq), "clue", label)
+    elif kind in RELATIONS:
+        a, b, *rest = args
+        model.relate(" ".join([a, kind, b, *rest]), (a, b), RELATIONS[kind](board, *rest))
+    elif kind == "alone":
+        (a,) = args
+        for p in board.people:
+            if p != a:
+                name = f"{a} alone in region, so not with {p}"
+                model.relate(name, (a, p), _different_region(board))
+    elif kind == "furthest":
+        a, b = args
+        for p in board.people:
+            if p not in (a, b):
+                model.relate(f"{a} further from {b} than {p}", (a, b, p), _further)
+
+
+def _further(a: Square, b: Square, other: Square) -> bool:
+    return steps_between(a, b) > steps_between(other, b)
 
 
 # --- rendering ------------------------------------------------------------
 
 
-def render(board: Board, model: Model, title: str, highlight: set[str] = frozenset()) -> str:
+def render(board: Board, model: Model, title: str, highlight: Collection[str] = frozenset()) -> str:
     """Draw the board, one colour per region, 4 columns per square."""
-    glyph = {name: sq for name, sq in board.objects.items()}
+    blocked = set(board.objects.values())
     at: dict[Square, str] = {}
     for person in board.people:
         square = model.chosen(person)
@@ -245,8 +283,7 @@ def render(board: Board, model: Model, title: str, highlight: set[str] = frozens
         for c in range(board.size):
             sq = Square(r, c)
             colour = _bg(PALETTE[board.region_of(sq) % len(PALETTE)])
-            obj = next((n for n, s in glyph.items() if s == sq), None)
-            if obj is not None:
+            if sq in blocked:
                 body = f"{INK} ## "
             elif sq in at:
                 person = at[sq]
@@ -269,10 +306,4 @@ def render(board: Board, model: Model, title: str, highlight: set[str] = frozens
 
 def open_squares(board: Board, model: Model) -> dict[str, list[Square]]:
     """Remaining candidate squares per person - the working set."""
-    return {
-        p: sorted(model.value_of(l) for l in model.options(p)) for p in board.people
-    }
-
-
-def touched_people(steps) -> set[str]:
-    return {s.literal.split("=")[0] for s in steps if s.asserted}
+    return {p: sorted(model.value_of(lit) for lit in model.options(p)) for p in board.people}

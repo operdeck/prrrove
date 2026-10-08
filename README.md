@@ -5,6 +5,7 @@ literals and constraints; the solving rules never learn anything about the
 puzzle they are solving.
 
 Currently solved: **Sudoku** (9x9) and **Murdoku/Prrrdoku** (any size).
+Requires Python 3.12+; no runtime dependencies.
 
 ```bash
 ./solve.sh examples/sudoku_easy.txt
@@ -77,7 +78,10 @@ Not implemented: chains. See `AGENT.md`.
 ## Verification
 
 ```bash
-uv run --with pytest pytest tests/ -q      # 40 tests
+uv run --with pytest pytest -q          # 51 tests
+uvx ruff check src tests                # lint
+uvx ruff format --check src tests       # formatting
+uvx mypy src                            # strict type check
 ```
 
 Correctness is checked against ground truth, not self-consistency:

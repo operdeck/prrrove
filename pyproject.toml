@@ -7,7 +7,7 @@ name = "csp-solver"
 version = "0.1.0"
 description = "Generic constraint satisfaction solver with human-readable reasoning"
 authors = [{name = "Otto Perdeck"}]
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
@@ -15,16 +15,22 @@ csp = "csp.cli:main"
 
 [dependency-groups]
 dev = [
-    "pytest>=7.0",
-    "black>=22.0",
-    "mypy>=0.990",
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
 ]
 
-[tool.black]
-line-length = 88
-target-version = ['py39']
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.mypy]
-python_version = "3.9"
-warn_return_any = true
-warn_unused_configs = true
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
