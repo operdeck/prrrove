@@ -53,8 +53,9 @@ Rules fire in order, restart from cheapest on success:
 
 1. **Naked Single** (Level 1): Cell with only one candidate → place it
 2. **Hidden Single** (Level 1): Value with only one cell in group → place it
-3. **Naked Pairs** (Level 2): Two cells with same candidates (Hall's marriage)
-4. **[Future]** Intersections, Fish (X-Wing), Chains
+3. **Naked Pairs** (Level 2): Two cells with same candidates (Hall's marriage theorem)
+4. **Intersections** (Level 3): Value confined to group overlap → eliminate from rest
+5. **[Future]** Fish (X-Wing), Chains, Bounded what-if
 
 Each rule returns `True` if it made progress, triggering restart and re-propagation.
 
@@ -160,12 +161,61 @@ Propagation finished but puzzle unsolved.
 - Check that solve() calls propagation after rule fires
 - Verify placements eliminate value from peer groups
 
+## Generic Algorithm Design
+
+All reasoning rules are **completely generic**—they work on any CSP, not just Sudoku.
+
+### Level 3: Intersection Rule (Already Implemented)
+
+**How it works:**
+- If a value appears only in the intersection of two groups
+- Eliminate that value from the rest of each group
+
+**Why it's generic:**
+```python
+# Sudoku: intersection of row 3 and box 5
+# But same logic for:
+# - Murdoku: intersection of suspect set and room
+# - Kakuro: intersection of row sum and column sum
+# - Any CSP with overlapping groups
+```
+
+The code in `_rule_intersections()` makes NO assumptions about:
+- Cell layout (grid, list, graph)
+- Problem domain (Sudoku, puzzles, scheduling, etc.)
+- What groups represent
+
+It only uses group membership (`group1.members & group2.members`).
+
+### Future Generic Rules
+
+All can be implemented the same way:
+
+| Level | Rule | Generic Principle |
+|-------|------|-------------------|
+| 4 | Fish (X-Wing) | Value appears in exactly N cells across M groups (M>N) → eliminate elsewhere |
+| 5 | Chains | Build implication graph: "if A=X then B=Y" → find contradictions |
+| 6 | What-if | Bounded backtracking: guess + propagate + detect contradiction |
+
+Each operates only on:
+- Groups (sets of cells)
+- Candidate bitmasks
+- Implication logic
+
 ## Extension Points
 
 ### New Rules
 Add in `CSPSolver._setup_default_rules()`:
 ```python
 self.add_rule("my_rule", self._rule_my_technique)
+```
+
+Example: Level 4 Fish
+```python
+def _rule_fish(self, model: CSPModel) -> bool:
+    """Generic fish rule (X-Wing, Swordfish, etc.)"""
+    # Same pattern: iterate groups, find values, eliminate candidates
+    # No Sudoku-specific code needed
 ```
 
 ### New Puzzle Types

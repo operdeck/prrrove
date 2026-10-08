@@ -187,6 +187,7 @@ class CSPSolver:
         self.add_rule("naked_single", self._rule_naked_single)
         self.add_rule("hidden_single", self._rule_hidden_single)
         self.add_rule("naked_pairs", self._rule_naked_pairs)
+        self.add_rule("intersections", self._rule_intersections)
 
     def add_rule(self, name: str, rule_func: Callable[[CSPModel], bool]):
         """Add a propagation rule.
@@ -379,5 +380,72 @@ class CSPSolver:
                                 changed = True
                     if changed:
                         return True
+
+        return False
+
+    def _rule_intersections(self, model: CSPModel) -> bool:
+        """Level 3: Intersection rule (Pointing Pairs).
+
+        If a value is confined to the intersection of two groups,
+        eliminate it from the rest of each group.
+
+        COMPLETELY GENERIC — works on any CSP with overlapping groups:
+
+        Sudoku: If 5 appears only at intersection of row 3 & box 5,
+                eliminate 5 from rest of row 3 AND rest of box 5
+        Murdoku: If Ann appears only at intersection of "kitchen" & "left",
+                 eliminate Ann from rest of kitchen AND rest of left
+
+        The algorithm is identical; only group names differ.
+        """
+        # For each pair of groups
+        for i, group1 in enumerate(model.groups):
+            for group2 in model.groups[i+1:]:
+                # Find intersection of two groups
+                intersection = group1.members & group2.members
+                if not intersection:
+                    continue
+
+                # For each value
+                for value in range(1, model.num_values + 1):
+                    bit = 1 << (value - 1)
+
+                    # Find where value appears in each group
+                    cells_g1 = {c for c in group1.members
+                               if c not in model.placements and model.candidates[c] & bit}
+                    cells_g2 = {c for c in group2.members
+                               if c not in model.placements and model.candidates[c] & bit}
+
+                    # If value confined to intersection in group1,
+                    # eliminate from rest of group2
+                    if cells_g1 and cells_g1 <= intersection:  # subset of intersection
+                        rest_of_g2 = group2.members - intersection
+                        changed = False
+                        for cell_id in rest_of_g2:
+                            if cell_id not in model.placements and model.candidates[cell_id] & bit:
+                                model.eliminate(
+                                    cell_id, value,
+                                    ReasonType.INTERSECTION,
+                                    f"{value} confined to {group1.group_id}∩{group2.group_id}"
+                                )
+                                changed = True
+                        if changed:
+                            return True
+
+                    # If value confined to intersection in group2,
+                    # eliminate from rest of group1
+                    if cells_g2 and cells_g2 <= intersection:  # subset of intersection
+                        rest_of_g1 = group1.members - intersection
+                        changed = False
+                        for cell_id in rest_of_g1:
+                            if cell_id not in model.placements and model.candidates[cell_id] & bit:
+                                model.eliminate(
+                                    cell_id, value,
+                                    ReasonType.INTERSECTION,
+                                    f"{value} confined to {group1.group_id}∩{group2.group_id}"
+                                )
+                                changed = True
+                        if changed:
+                            return True
 
         return False
