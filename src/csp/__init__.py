@@ -1,9 +1,9 @@
-"""Constraint Satisfaction Puzzle Solver.
+"""Exact-cover puzzle solver.
 
-A generic solver for puzzles modeled as exact cover with propagation.
-Supports Sudoku, Murdoku, Kakuro, and similar constraint puzzles.
+`core` holds the puzzle-agnostic engine; each other module compiles one
+puzzle family down to literals and constraints.
 """
 
-from .core import CSPModel, CSPSolver, Elimination, Placement
+from .core import Contradiction, Kind, Model, Result, Solver, Step
 
-__all__ = ["CSPModel", "CSPSolver", "Elimination", "Placement"]
+__all__ = ["Contradiction", "Kind", "Model", "Result", "Solver", "Step"]

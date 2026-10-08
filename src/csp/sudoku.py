@@ -1,195 +1,119 @@
-"""Sudoku puzzle compiler - converts a puzzle to a CSP model."""
+"""Sudoku expressed as exact cover.
 
-from .core import CSPModel, Group, ReasonType, Placement
+Literals are "cell holds digit". The four constraint families are the whole
+of Sudoku:
+  * each cell holds exactly one digit
+  * each digit sits exactly once in each row
+  * ... each column
+  * ... each 3x3 box
+"""
 
+from .core import Kind, Model
 
-class SudokuCompiler:
-    """Compiles a Sudoku puzzle into a CSP model.
-
-    Sudoku literals: (row, col, digit)
-    Sudoku groups:
-      - 9 row groups: each row has digits 1-9
-      - 9 column groups: each column has digits 1-9
-      - 9 box groups: each 3x3 box has digits 1-9
-      - 81 cell groups: each cell has exactly one digit
-    """
-
-    def __init__(self, puzzle_str: str):
-        """Initialize with puzzle string.
-
-        Format: grid with dots for empty cells, | and - for visual separation.
-        Example:
-            5 3 . | . 7 . | . . .
-            6 . . | 1 9 5 | . . .
-            ...
-        """
-        self.puzzle_str = puzzle_str
-        self.grid = self._parse_puzzle()
-
-    def _parse_puzzle(self) -> list[list[int]]:
-        """Parse puzzle string into 9x9 grid.
-
-        Returns:
-            9x9 list with 0 for empty cells, 1-9 for givens
-        """
-        grid = []
-        for line in self.puzzle_str.strip().split('\n'):
-            # Skip separator lines
-            if '-' in line or line.strip() == '':
-                continue
-
-            # Parse row
-            row = []
-            for char in line:
-                if char in '.0':
-                    row.append(0)
-                elif char.isdigit():
-                    row.append(int(char))
-                # Skip pipes and spaces
-
-            if row:
-                if len(row) != 9:
-                    raise ValueError(f"Row has {len(row)} cells, expected 9")
-                grid.append(row)
-
-        if len(grid) != 9:
-            raise ValueError(f"Grid has {len(grid)} rows, expected 9")
-
-        return grid
-
-    def build(self) -> CSPModel:
-        """Build CSP model from puzzle.
-
-        Returns:
-            CSPModel ready for solving
-        """
-        model = CSPModel(num_values=9)
-
-        # Add all cells
-        for r in range(9):
-            for c in range(9):
-                cell_id = self._cell_id(r, c)
-
-                if self.grid[r][c] != 0:
-                    # Given clue
-                    model.add_cell(cell_id, 1 << (self.grid[r][c] - 1))
-                    model.place(
-                        cell_id, self.grid[r][c],
-                        ReasonType.GIVEN,
-                        f"Given clue"
-                    )
-                else:
-                    # Empty cell - all digits possible
-                    model.add_cell(cell_id)
-
-        # Add row groups
-        for r in range(9):
-            members = {self._cell_id(r, c) for c in range(9)}
-            model.add_group(Group(f"row_{r}", members))
-
-        # Add column groups
-        for c in range(9):
-            members = {self._cell_id(r, c) for r in range(9)}
-            model.add_group(Group(f"col_{c}", members))
-
-        # Add 3x3 box groups
-        for box_r in range(3):
-            for box_c in range(3):
-                members = set()
-                for r in range(3):
-                    for c in range(3):
-                        members.add(self._cell_id(box_r * 3 + r, box_c * 3 + c))
-                model.add_group(Group(f"box_{box_r}_{box_c}", members))
-
-        # Add cell groups (each cell has exactly one digit)
-        for r in range(9):
-            for c in range(9):
-                cell_id = self._cell_id(r, c)
-                model.add_group(Group(f"cell_{r}_{c}", {cell_id}))
-
-        return model
-
-    @staticmethod
-    def _cell_id(r: int, c: int) -> str:
-        """Generate cell identifier (1-indexed)."""
-        return f"r{r+1}c{c+1}"
-
-    @staticmethod
-    def _from_cell_id(cell_id: str) -> tuple[int, int]:
-        """Parse cell identifier back to (row, col) (0-indexed)."""
-        parts = cell_id.split('c')
-        return int(parts[0][1:]) - 1, int(parts[1]) - 1
+SIZE = 9
+BOX = 3
+BLUE = "\033[94m"
+RESET = "\033[0m"
 
 
-class SudokuDisplay:
-    """Display Sudoku grid nicely."""
+def cell_name(row: int, col: int) -> str:
+    """1-indexed, matching what the grid prints."""
+    return f"r{row + 1}c{col + 1}"
 
-    @staticmethod
-    def show(model: CSPModel, title: str = "Sudoku", highlight: set = None):
-        """Display current grid state with clean ASCII formatting.
 
-        Args:
-            model: CSP model to display
-            title: Title to print
-            highlight: Set of cell_ids to highlight in green
-        """
-        if highlight is None:
-            highlight = set()
+def parse(text: str) -> list[list[int]]:
+    """Read a 9x9 grid. Digits are givens; '.' and '0' are blanks."""
+    grid = []
+    for line in text.strip().splitlines():
+        if set(line.strip()) <= set("-+|  "):
+            continue
+        row = [0 if ch in ".0" else int(ch) for ch in line if ch in ".0123456789"]
+        if not row:
+            continue
+        if len(row) != SIZE:
+            raise ValueError(f"row has {len(row)} cells, expected {SIZE}: {line!r}")
+        grid.append(row)
+    if len(grid) != SIZE:
+        raise ValueError(f"grid has {len(grid)} rows, expected {SIZE}")
+    return grid
 
-        print(f"\n{title}")
-        print("  +------+------+------+")
 
-        for r in range(9):
-            if r % 3 == 0 and r != 0:
-                print("  +------+------+------+")
+def compile_puzzle(text: str) -> tuple[Model, list[list[int]]]:
+    grid = parse(text)
+    model = Model()
 
-            row_str = f"{r+1} |"
-            for c in range(9):
-                if c % 3 == 0 and c != 0:
-                    row_str += "|"
+    digits = range(1, SIZE + 1)
+    cells = [(r, c) for r in range(SIZE) for c in range(SIZE)]
 
-                cell_id = f"r{r+1}c{c+1}"
-                candidates = model.get_candidates(cell_id)
+    # Each cell holds exactly one digit. This constraint is the cell's domain.
+    for row, col in cells:
+        name = cell_name(row, col)
+        model.constrain(
+            f"{name} holds one digit",
+            Kind.EXACTLY_ONE,
+            [model.literal(name, d) for d in digits],
+            defines=name,
+        )
 
-                if len(candidates) == 1:
-                    value = list(candidates)[0]
-                    if cell_id in highlight:
-                        # Highlight newly placed cells in blue
-                        row_str += f"\033[94m{value}\033[0m "
-                    else:
-                        row_str += f"{value} "
-                else:
-                    row_str += ". "
+    # Each digit appears exactly once per row, column and box.
+    for d in digits:
+        for r in range(SIZE):
+            model.constrain(
+                f"{d} once in row {r + 1}",
+                Kind.EXACTLY_ONE,
+                [model.literal(cell_name(r, c), d) for c in range(SIZE)],
+            )
+        for c in range(SIZE):
+            model.constrain(
+                f"{d} once in col {c + 1}",
+                Kind.EXACTLY_ONE,
+                [model.literal(cell_name(r, c), d) for r in range(SIZE)],
+            )
+        for br in range(BOX):
+            for bc in range(BOX):
+                members = [
+                    model.literal(cell_name(br * BOX + r, bc * BOX + c), d)
+                    for r in range(BOX)
+                    for c in range(BOX)
+                ]
+                model.constrain(
+                    f"{d} once in box {br + 1},{bc + 1}", Kind.EXACTLY_ONE, members
+                )
 
-            row_str += "|"
-            print(row_str)
+    for row, col in cells:
+        given = grid[row][col]
+        if given:
+            name = cell_name(row, col)
+            model.assign(model.literal(name, given), "given", "stated in the puzzle")
 
-        print("  +------+------+------+")
-        print("  |1 2 3 |4 5 6 |7 8 9 |")
+    return model, grid
 
-    @staticmethod
-    def show_candidates(model: CSPModel, title: str = "Candidates"):
-        """Display candidate counts."""
-        print(f"\n{title}")
-        for r in range(9):
-            if r % 3 == 0 and r != 0:
-                print()
 
-            row_str = ""
-            for c in range(9):
-                if c % 3 == 0 and c != 0:
-                    row_str += "  "
+def render(model: Model, title: str, highlight: set[str] = frozenset()) -> str:
+    """Draw the grid, colouring the cells named in `highlight`."""
+    rule = "  +------+------+------+"
+    out = [f"\n{title}", rule]
+    for r in range(SIZE):
+        if r and r % BOX == 0:
+            out.append(rule)
+        line = f"{r + 1} |"
+        for c in range(SIZE):
+            if c and c % BOX == 0:
+                line += "|"
+            name = cell_name(r, c)
+            digit = model.chosen(name)
+            if digit is None:
+                line += ". "
+            elif name in highlight:
+                line += f"{BLUE}{digit}{RESET} "
+            else:
+                line += f"{digit} "
+        out.append(line + "|")
+    out.append(rule)
+    out.append("  |1 2 3 |4 5 6 |7 8 9 |")
+    return "\n".join(out)
 
-                cell_id = f"r{r}c{c}"
-                candidates = model.get_candidates(cell_id)
-                row_str += f"{len(candidates):2d} "
 
-            print(row_str)
-
-    @staticmethod
-    def show_log(model: CSPModel, limit: int = 20):
-        """Display recent log entries."""
-        print(f"\nRecent steps (last {limit}):")
-        for entry in model.log[-limit:]:
-            symbol = "→" if isinstance(entry, Placement) else "✗"
-            print(f"  {symbol} {entry.cell_id}={entry.value}: {entry.reason_text}")
+def touched_cells(steps) -> set[str]:
+    """Cell names newly decided by a batch of log steps."""
+    return {s.literal.split("=")[0] for s in steps if s.asserted}
