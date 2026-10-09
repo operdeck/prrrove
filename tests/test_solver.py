@@ -499,6 +499,54 @@ def test_unknown_region_name_is_rejected():
         murdoku.compile_puzzle(board, [("in_region", ["A", "nowhere"])])
 
 
+def test_not_next_to_rules_out_the_squares_beside_a_thing():
+    sq = murdoku.Square
+    board = _one_region_board(3, ["A", "B", "C"], {"vaas": [sq(1, 1)]})
+    model = murdoku.compile_puzzle(board, [("not_next_to", ["A", "vaas"])])
+    left = sorted(model.value_of(lit) for lit in model.options("A"))
+    assert left == [sq(0, 0), sq(0, 2), sq(2, 0), sq(2, 2)]
+
+
+def test_counting_clue_parses_its_parts():
+    n, parts = murdoku.counted(["1", "in_region", "A", "x", ";", "left_of", "A", "B"])
+    assert n == 1 and parts == [("in_region", ["A", "x"]), ("left_of", ["A", "B"])]
+    with pytest.raises(ValueError, match="count first"):
+        murdoku.counted(["in_region", "A", "x"])
+
+
+def test_counting_clue_holds_when_exactly_n_parts_do():
+    sq = murdoku.Square
+    board = _one_region_board(3, ["A", "B", "C"])
+    clue = ("exactly", ["1", "left_of", "A", "B", ";", "above", "A", "B"])
+    (rel,) = murdoku.compile_puzzle(board, [clue]).relations
+    assert rel.variables == ("A", "B")
+    assert rel.holds(sq(1, 0), sq(0, 2))  # left of, not above
+    assert not rel.holds(sq(0, 0), sq(2, 2))  # both
+    assert not rel.holds(sq(2, 2), sq(0, 0))  # neither
+
+
+def test_counting_clue_about_one_person_filters_at_compile_time():
+    sq = murdoku.Square
+    board = _one_region_board(2, ["A", "B"], {"vaas": [sq(0, 0)]})
+    clue = ("exactly", ["1", "next_to", "A", "vaas", ";", "not_next_to", "A", "vaas"])
+    model = murdoku.compile_puzzle(board, [clue])
+    assert not model.relations and len(model.options("A")) == 3
+
+
+@pytest.mark.parametrize(
+    "args, problem",
+    [
+        (["3", "left_of", "A", "B", ";", "above", "A", "B"], "can never hold"),
+        (["1", "alone", "A", ";", "above", "A", "B"], "simple clues only"),
+        (["1", "left_of", "A", "B", ";", "left_of", "C", "D"], "at most 3"),
+    ],
+)
+def test_counting_clue_rejects_what_it_cannot_do(args, problem):
+    board = _one_region_board(4, ["A", "B", "C", "D"])
+    with pytest.raises(ValueError, match=problem):
+        murdoku.compile_puzzle(board, [("exactly", args)])
+
+
 def test_numeric_region_ids_still_read():
     """Ids are just tokens: older files numbered their regions."""
     text = (EXAMPLES / "prrrdoku1.txt").read_text()

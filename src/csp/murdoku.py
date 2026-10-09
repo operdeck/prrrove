@@ -168,6 +168,11 @@ def _knight_from(board: Board, *things: str) -> SquareTest:
     return lambda sq: any(knight_move(sq, t) for t in targets)
 
 
+def _not_next_to(board: Board, *things: str) -> SquareTest:
+    beside = _next_to(board, *things)
+    return lambda sq: not beside(sq)
+
+
 def _on(board: Board, *things: str) -> SquareTest:
     targets = board.squares_of(things)
     return lambda sq: sq in targets
@@ -214,11 +219,13 @@ FILTERS: dict[str, Callable[..., SquareTest]] = {
     "in_region": _in_region,  # in_region <person> <region or group>...
     "outside": _outside,  # outside <person> <region or group>...
     "next_to": _next_to,  # next_to <person> <thing>...: beside any of them
+    "not_next_to": _not_next_to,  # not_next_to <person> <thing>...: beside none of them
     "knight_from": _knight_from,  # knight_from <person> <thing>...: a knight's move away
     "on": _on,  # on <person> <furniture>...
 }
 
 RELATIONS: dict[str, Callable[..., PairTest]] = {
+    # No "two people side by side": with one person per row and column it never holds.
     "same_region": _same_region,  # same_region <a> <b>
     "different_region": _different_region,  # different_region <a> <b>
     "apart": _apart,  # apart <a> <b>: different regions that do not border
@@ -233,6 +240,29 @@ GROUP_CLUES = {
     "alone": 1,  # alone <a>: nobody else in a's region
     "furthest": 2,  # furthest <a> <b>: a strictly further from b than anyone
 }
+
+# exactly <n> <clue> ; <clue> ...: exactly n of the listed clues hold. Each
+# listed clue is a filter or a relation; together they may name at most
+# COUNTED_PEOPLE people, since the engine tries every combination of their squares.
+COUNTING = "exactly"
+COUNTED_PEOPLE = 3
+
+
+def counted(args: Sequence[str]) -> tuple[int, list[Clue]]:
+    """A counting clue's arguments: '2 next_to Tim boom ; left_of Jos Otto'
+    -> (2, [('next_to', ['Tim', 'boom']), ('left_of', ['Jos', 'Otto'])])."""
+    if not args or not args[0].isdigit():
+        raise ValueError(f"{COUNTING} needs a count first, as in '{COUNTING} 1 <clue> ; <clue>'")
+    parts: list[Clue] = []
+    words: list[str] = []
+    for word in [*args[1:], ";"]:
+        if word != ";":
+            words.append(word)
+        elif words:
+            kind, *rest = words
+            parts.append((kind, rest))
+            words = []
+    return int(args[0]), parts
 
 
 @dataclass(frozen=True)
@@ -264,6 +294,8 @@ def conditions(board: Board, clues: Iterable[Clue]) -> list[Condition]:
 
 
 def _conditions(board: Board, kind: str, args: list[str], number: int | None) -> list[Condition]:
+    if kind == COUNTING:
+        return [_counting(board, args, number)]
     arity = 1 if kind in FILTERS else 2 if kind in RELATIONS else GROUP_CLUES.get(kind)
     if arity is None:
         raise ValueError(f"unknown clue {kind!r}")
@@ -297,6 +329,31 @@ def _conditions(board: Board, kind: str, args: list[str], number: int | None) ->
 
 def _further(a: Square, b: Square, other: Square) -> bool:
     return steps_between(a, b) > steps_between(other, b)
+
+
+def _counting(board: Board, args: list[str], number: int | None) -> Condition:
+    """One condition over everyone the listed clues name: exactly n of them hold."""
+    n, parts = counted(args)
+    if not 0 <= n <= len(parts):
+        raise ValueError(f"{COUNTING} {n} of {len(parts)} clues can never hold")
+    subs: list[Condition] = []
+    for kind, rest in parts:
+        if kind not in FILTERS and kind not in RELATIONS:
+            raise ValueError(f"{COUNTING} can count simple clues only, not {kind!r}")
+        (sub,) = _conditions(board, kind, rest, None)
+        subs.append(sub)
+    people = tuple(dict.fromkeys(p for sub in subs for p in sub.people))
+    if len(people) > COUNTED_PEOPLE:
+        raise ValueError(
+            f"{COUNTING} names {len(people)} people; at most {COUNTED_PEOPLE} are supported"
+        )
+
+    def test(*squares: Square) -> bool:
+        at = dict(zip(people, squares, strict=True))
+        return sum(sub.test(*(at[p] for p in sub.people)) for sub in subs) == n
+
+    label = f"{COUNTING} {n} of: {'; '.join(sub.label for sub in subs)}"
+    return Condition(label, people, test, COUNTING, tuple(args), number)
 
 
 def compile_puzzle(board: Board, clues: Iterable[Clue]) -> Model:

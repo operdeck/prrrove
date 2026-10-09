@@ -1,0 +1,48 @@
+# Murdoku "The house"  (5x5, four regions)
+#
+# Made up for this repo to show the clue types "not next to" and the counting
+# clue "exactly n of these is true". Every clue is needed: drop any one and
+# the solution is no longer unique.
+#
+# Solution: Cleo r1c2, Eva r2c1, Ben r3c4, Ada r4c3, Dirk r5c5.
+
+Size: 5
+
+Regions:
+g: garden #CBE6B9
+k: kitchen #FADFB5
+h: hall #F4CBC3
+s: study #C4DCF2
+
+Grid:
+g g g k k
+g h h k k
+s h h h k
+s s h h k
+s s s h h
+
+Objects:
+tree: r1c1
+oven: r1c5
+desk: r4c1
+lamp: r2c3
+
+# The sofa is 1x2; both it and the chair can be sat on.
+Furniture:
+sofa: r3c3 r3c4
+chair: r5c2
+
+People:
+Ada
+Ben
+Cleo
+Dirk
+Eva
+
+Clues:
+exactly 1 in_region Ada study ; in_region Ben hall
+left_of Ada Dirk
+in_region Eva garden
+on Ben sofa
+above Cleo Eva
+not_next_to Ben lamp
