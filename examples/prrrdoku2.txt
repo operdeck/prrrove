@@ -9,24 +9,24 @@
 Size: 9
 
 Regions:
-0: klimgebied
-1: keukenwinkel
-2: moestuin
-3: speeltuin
-4: kampeerplek
-5: cafe
-6: tuin
+a: klimgebied
+b: keukenwinkel
+c: moestuin
+d: speeltuin
+e: kampeerplek
+f: cafe
+g: tuin
 
 Grid:
-0 0 0 1 1 1 2 2 2
-0 0 0 1 1 1 2 2 2
-0 0 3 3 1 1 1 2 2
-4 3 3 3 5 5 1 6 6
-4 4 3 3 5 5 6 6 6
-4 4 4 3 5 5 5 6 6
-4 4 4 3 3 5 5 6 6
-4 4 3 3 3 5 5 5 6
-4 4 4 3 3 3 5 5 6
+a a a b b b c c c
+a a a b b b c c c
+a a d d b b b c c
+e d d d f f b g g
+e e d d f f g g g
+e e e d f f f g g
+e e e d d f f g g
+e e d d d f f f g
+e e e d d d f f g
 
 Objects:
 klimwand: r2c2

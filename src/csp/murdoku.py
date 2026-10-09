@@ -60,19 +60,21 @@ def knight_move(a: Square, b: Square) -> bool:
 class Board:
     """The fixed layout: regions, things on the board, and who is playing.
 
-    `objects` block their squares; `furniture` (such as a bank to lie on)
-    does not. Several things may share a name, like three suitcases.
+    `regions` holds a short region id per square (a letter, say) and
+    `region_names` maps each id to its name. `objects` block their squares;
+    `furniture` (such as a bank to lie on) does not. Several things may share
+    a name, like three suitcases.
     """
 
     size: int
-    regions: list[list[int]]
-    region_names: dict[int, str]
+    regions: list[list[str]]
+    region_names: dict[str, str]
     objects: dict[str, list[Square]]
     people: list[str]
     groups: dict[str, list[str]] = field(default_factory=dict)
     furniture: dict[str, list[Square]] = field(default_factory=dict)
     free: list[Square] = field(init=False)
-    borders: set[frozenset[int]] = field(init=False)
+    borders: set[frozenset[str]] = field(init=False)
 
     def __post_init__(self) -> None:
         if len(self.people) != self.size:
@@ -91,22 +93,22 @@ class Board:
             and self.region_of(sq) != self.region_of(nb)
         }
 
-    def region_of(self, square: Square) -> int:
+    def region_of(self, square: Square) -> str:
         return self.regions[square.row][square.col]
 
-    def region_id(self, name: str) -> int:
+    def region_id(self, name: str) -> str:
         for rid, rname in self.region_names.items():
             if rname == name:
                 return rid
         raise ValueError(f"unknown region {name!r}; have {sorted(self.region_names.values())}")
 
-    def region_ids(self, names: Iterable[str]) -> set[int]:
+    def region_ids(self, names: Iterable[str]) -> set[str]:
         """Region ids for a mix of region names and group names."""
         return {
             self.region_id(member) for name in names for member in self.groups.get(name, [name])
         }
 
-    def regions_touch(self, a: int, b: int) -> bool:
+    def regions_touch(self, a: str, b: str) -> bool:
         """Share a side somewhere; a shared corner does not count."""
         return frozenset((a, b)) in self.borders
 
@@ -314,6 +316,7 @@ def render(board: Board, model: Model, title: str, steps: Sequence[Step] = ()) -
     blocked = board.blocked
     furnished = board.squares_of(board.furniture)
     reachable = _reachable(board, model)
+    shade = {rid: PALETTE[i % len(PALETTE)] for i, rid in enumerate(board.region_names)}
     placed = {s.var for s in steps if s.asserted}
     eliminated = {s.value for s in steps if not s.asserted}
     at: dict[Square, str] = {}
@@ -328,7 +331,7 @@ def render(board: Board, model: Model, title: str, steps: Sequence[Step] = ()) -
         line = f"{r + 1:>2} "
         for c in range(board.size):
             sq = Square(r, c)
-            colour = _bg(PALETTE[board.region_of(sq) % len(PALETTE)])
+            colour = _bg(shade[board.region_of(sq)])
             if sq in blocked:
                 body = f"{INK} ## "
             elif sq in at:
@@ -351,9 +354,9 @@ def render(board: Board, model: Model, title: str, steps: Sequence[Step] = ()) -
     out += _narrowed(board, model, steps)
 
     out.append("")
-    for rid in sorted(board.region_names):
-        swatch = _bg(PALETTE[rid % len(PALETTE)]) + "   " + RESET
-        out.append(f"  {swatch} {board.region_names[rid]}")
+    for rid, name in board.region_names.items():
+        swatch = _bg(shade[rid]) + "   " + RESET
+        out.append(f"  {swatch} {name}")
     out.append(f"\n  {INK}##{RESET} object   =  furniture   .  open   x  nobody can stand here")
     out.append(f"  {NEW}blue{RESET}: changed by this step")
     for label, things in (("objects", board.objects), ("furniture", board.furniture)):

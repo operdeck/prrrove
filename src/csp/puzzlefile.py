@@ -50,9 +50,9 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
     region_names = {}
     for line in section["Regions"]:
         rid, _, name = line.partition(":")
-        region_names[int(rid)] = name.strip()
+        region_names[rid.strip()] = name.strip()
 
-    grid = [[int(x) for x in line.split()] for line in section["Grid"]]
+    grid = [line.split() for line in section["Grid"]]
     if len(grid) != size or any(len(row) != size for row in grid):
         raise ValueError(f"Grid is not {size}x{size}")
     unknown = {r for row in grid for r in row} - set(region_names)

@@ -141,9 +141,9 @@ Murdoku uses named sections — see `examples/prrrdoku*.txt`:
 
 ```
 Size: 7
-Regions:        # id: name (no spaces)
+Regions:        # id: name, e.g. "a: keukenwinkel" (name without spaces)
 Groups:         # optional; name: region region ...
-Grid:           # region id per square
+Grid:           # region id per square, e.g. "a a b b c c c"
 Objects:        # name: square... — blocks those squares; names may repeat
 Furniture:      # optional; name: square... — can be stood on
 People:         # one per line, count must equal Size

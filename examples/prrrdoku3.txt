@@ -12,29 +12,29 @@
 Size: 9
 
 Regions:
-0: klimgebied_noord
-1: klimgebied_zuid
-2: moestuin
-3: helmholtzstraat
-4: bankastraat
-5: kantoor
-6: woonboot
-7: water
+a: klimgebied_noord
+b: klimgebied_zuid
+c: moestuin
+d: helmholtzstraat
+e: bankastraat
+f: kantoor
+g: woonboot
+h: water
 
 Groups:
 klimgebied: klimgebied_noord klimgebied_zuid
 amsterdam: helmholtzstraat bankastraat kantoor woonboot water
 
 Grid:
-3 3 3 3 4 4 0 0 0
-3 3 3 4 4 4 0 0 0
-3 3 4 4 4 2 0 0 0
-5 5 5 5 2 2 2 2 2
-5 5 5 5 2 2 2 2 2
-7 7 7 7 7 1 1 1 1
-7 6 6 6 7 1 1 1 1
-7 6 6 6 7 1 1 1 1
-7 7 7 7 7 1 1 1 1
+d d d d e e a a a
+d d d e e e a a a
+d d e e e c a a a
+f f f f c c c c c
+f f f f c c c c c
+h h h h h b b b b
+h g g g h b b b b
+h g g g h b b b b
+h h h h h b b b b
 
 Objects:
 koffer: r1c5 r4c7 r9c7

@@ -327,9 +327,15 @@ def test_nobody_stands_on_an_object(prrrdoku1):
     assert not set(result.assignment.values()) & board.blocked
 
 
+def _one_region_board(size: int, people: list[str], objects=None, **extra) -> murdoku.Board:
+    """A size x size board that is all region 'a', called 'here'."""
+    grid = [["a"] * size for _ in range(size)]
+    return murdoku.Board(size, grid, {"a": "here"}, objects or {}, people, **extra)
+
+
 def test_people_count_must_match_board_size():
     with pytest.raises(ValueError):
-        murdoku.Board(3, [[0] * 3] * 3, {0: "a"}, {}, ["only", "two"])
+        _one_region_board(3, ["only", "two"])
 
 
 def test_relations_prunes_a_whole_relation_in_one_step():
@@ -348,7 +354,7 @@ def _plain(text: str) -> str:
 
 
 def test_render_crosses_out_squares_nobody_can_reach():
-    board = murdoku.Board(2, [[0, 0], [0, 0]], {0: "here"}, {}, ["A", "B"])
+    board = _one_region_board(2, ["A", "B"])
     model = murdoku.compile_puzzle(board, [("in_region", ["A", "here"])])
     sq = murdoku.Square
     model.eliminate(model.literal("A", sq(0, 0)), "test", "gone")
@@ -482,13 +488,8 @@ def test_later_prrrdokus_need_what_if(name):
 
 def test_furniture_can_be_stood_on_and_objects_cannot():
     sq = murdoku.Square
-    board = murdoku.Board(
-        2,
-        [[0, 0], [0, 0]],
-        {0: "here"},
-        {"rock": [sq(0, 0)]},
-        ["A", "B"],
-        furniture={"bank": [sq(1, 0), sq(1, 1)]},
+    board = _one_region_board(
+        2, ["A", "B"], {"rock": [sq(0, 0)]}, furniture={"bank": [sq(1, 0), sq(1, 1)]}
     )
     assert board.free == [sq(0, 1), sq(1, 0), sq(1, 1)]
     model = murdoku.compile_puzzle(board, [("on", ["A", "bank"])])
@@ -497,9 +498,7 @@ def test_furniture_can_be_stood_on_and_objects_cannot():
 
 def test_knight_move_and_shared_object_names():
     sq = murdoku.Square
-    board = murdoku.Board(
-        3, [[0] * 3] * 3, {0: "here"}, {"koffer": [sq(0, 0), sq(2, 2)]}, ["A", "B", "C"]
-    )
+    board = _one_region_board(3, ["A", "B", "C"], {"koffer": [sq(0, 0), sq(2, 2)]})
     model = murdoku.compile_puzzle(board, [("knight_from", ["A", "koffer"])])
     reachable = sorted(model.value_of(lit) for lit in model.options("A"))
     assert reachable == [sq(0, 1), sq(1, 0), sq(1, 2), sq(2, 1)]
@@ -508,10 +507,10 @@ def test_knight_move_and_shared_object_names():
 
 
 def test_furthest_is_strict():
-    board = murdoku.Board(2, [[0, 0], [0, 0]], {0: "here"}, {}, ["A", "B"])
+    board = _one_region_board(2, ["A", "B"])
     model = murdoku.compile_puzzle(board, [("furthest", ["A", "B"])])
     assert len(model.relations) == 0
-    board = murdoku.Board(3, [[0] * 3] * 3, {0: "here"}, {}, ["A", "B", "C"])
+    board = _one_region_board(3, ["A", "B", "C"])
     model = murdoku.compile_puzzle(board, [("furthest", ["A", "B"])])
     (rel,) = model.relations
     sq = murdoku.Square
@@ -520,9 +519,23 @@ def test_furthest_is_strict():
 
 
 def test_unknown_region_name_is_rejected():
-    board = murdoku.Board(2, [[0, 0], [0, 0]], {0: "here"}, {}, ["A", "B"])
+    board = _one_region_board(2, ["A", "B"])
     with pytest.raises(ValueError):
         murdoku.compile_puzzle(board, [("in_region", ["A", "nowhere"])])
+
+
+def test_numeric_region_ids_still_read():
+    """Ids are just tokens: older files numbered their regions."""
+    text = (EXAMPLES / "prrrdoku1.txt").read_text()
+    numbered = text.replace("\na: ", "\n0: ").replace("\nb: ", "\n1: ")
+    numbered = re.sub(
+        r"(?m)^([a-f] )+[a-f]$",
+        lambda m: m[0].replace("a", "0").replace("b", "1"),
+        numbered,
+    )
+    board, _ = load_board(numbered)
+    assert board.region_names["0"] == "klimgebied"
+    assert board.region_of(murdoku.Square(0, 3)) == "1"
 
 
 # --- calcudoku -----------------------------------------------------------
