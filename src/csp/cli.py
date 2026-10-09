@@ -9,7 +9,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from . import bruteforce, calcudoku, murdoku, report, sudoku
+from . import bruteforce, calcudoku, murdoku, report, story, sudoku
 from .core import DEFAULT_RULES, Contradiction, Model, Solver, Step
 from .puzzlefile import KINDS, detect, load_board
 
@@ -128,6 +128,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="search for every solution without the engine, to check uniqueness",
     )
+    instead.add_argument(
+        "--explain",
+        action="store_true",
+        help="Murdoku only: write out a short worked solution, as for a puzzle booklet",
+    )
     parser.add_argument(
         "--png",
         type=Path,
@@ -163,6 +168,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.brute_force:
         return brute_force(puzzle, text)
+    if args.explain:
+        if kind != "murdoku":
+            print(
+                f"--explain only writes out Murdoku solutions so far, not {kind}", file=sys.stderr
+            )
+            return 2
+        print(f"\n{story.explain(text)}")
+        return 0
 
     def on_step(rule: str, steps: Sequence[Step]) -> None:
         if not (args.verbose or args.step):
