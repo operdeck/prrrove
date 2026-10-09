@@ -34,12 +34,10 @@ He was alone with his murderer.
 </tr>
 </table>
 
-### The solution, as written by `--explain`
+<details>
+<summary><b>Show the solution</b>, as written by <code>--explain</code></summary>
 
-<table>
-<tr>
-<td><img src="docs/images/murdoku_intro-solution.png" width="300" alt="The solution"></td>
-<td>
+<br>
 
 - **The direct clues.** Ingrid is on a chair (1): r3c1, r3c4 or r4c3. Joost
   is next to the tree (2): r1c1. Lotte is on the bed (3): r4c1 or r4c2.
@@ -47,12 +45,12 @@ He was alone with his murderer.
   r4c2**. Lotte takes row 4 and Joost takes column 1, so **Ingrid on r3c4**.
   Only r2c3 is left for Wouter: **Wouter on r2c3**.
 
+<img src="docs/images/murdoku_intro-solution.png" width="300" alt="The solution">
+
 Wouter is in the sitting room, and the only other person there is
 **Ingrid**. She did it.
 
-</td>
-</tr>
-</table>
+</details>
 
 Both pictures and the solution text are generated from
 [`examples/murdoku_intro.txt`](examples/murdoku_intro.txt):
