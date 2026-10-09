@@ -223,12 +223,77 @@ GROUP_CLUES = {
 }
 
 
+@dataclass(frozen=True)
+class Condition:
+    """What one clue requires: `test(*squares)` of `people`, in order.
+
+    This is the puzzle's meaning, independent of how it is solved: the
+    compiler turns it into the model, the brute-force checker tests it
+    directly.
+    """
+
+    label: str
+    people: tuple[str, ...]
+    test: Callable[..., bool]
+
+
+def conditions(board: Board, clues: Iterable[Clue]) -> list[Condition]:
+    """Every clue as conditions on one, two or three people."""
+    out: list[Condition] = []
+    for kind, args in clues:
+        out += _conditions(board, kind, args)
+    return out
+
+
+def _conditions(board: Board, kind: str, args: list[str]) -> list[Condition]:
+    arity = 1 if kind in FILTERS else 2 if kind in RELATIONS else GROUP_CLUES.get(kind)
+    if arity is None:
+        raise ValueError(f"unknown clue {kind!r}")
+    for who in args[:arity]:
+        if who not in board.people:
+            raise ValueError(f"clue {kind} {' '.join(args)} names unknown person {who!r}")
+
+    if kind in FILTERS:
+        person, *rest = args
+        return [Condition(" ".join([kind, *args]), (person,), FILTERS[kind](board, *rest))]
+    if kind in RELATIONS:
+        a, b, *rest = args
+        return [Condition(" ".join([a, kind, b, *rest]), (a, b), RELATIONS[kind](board, *rest))]
+    if kind == "alone":
+        (a,) = args
+        return [
+            Condition(f"{a} alone in region, so not with {p}", (a, p), _different_region(board))
+            for p in board.people
+            if p != a
+        ]
+    a, b = args
+    return [
+        Condition(f"{a} further from {b} than {p}", (a, b, p), _further)
+        for p in board.people
+        if p not in (a, b)
+    ]
+
+
+def _further(a: Square, b: Square, other: Square) -> bool:
+    return steps_between(a, b) > steps_between(other, b)
+
+
 def compile_puzzle(board: Board, clues: Iterable[Clue]) -> Model:
-    """The model for a Murdoku board and its clues."""
+    """The model for a Murdoku board and its clues.
+
+    A condition on one person is applied straight away, ruling out the
+    squares that fail it; a condition on several people becomes a relation.
+    """
     model = Model()
     _add_board_rules(model, board)
-    for kind, args in clues:
-        _add_clue(model, board, kind, args)
+    for condition in conditions(board, clues):
+        if len(condition.people) == 1:
+            (person,) = condition.people
+            for sq in board.free:
+                if not condition.test(sq):
+                    model.eliminate(model.literal(person, sq), "clue", condition.label)
+        else:
+            model.relate(condition.label, condition.people, condition.test)
     return model
 
 
@@ -266,41 +331,6 @@ def _add_board_rules(model: Model, board: Board) -> None:
 
 def _anyone_on(model: Model, board: Board, squares: list[Square]) -> list[LiteralId]:
     return [model.literal(p, sq) for p in board.people for sq in squares]
-
-
-def _add_clue(model: Model, board: Board, kind: str, args: list[str]) -> None:
-    arity = 1 if kind in FILTERS else 2 if kind in RELATIONS else GROUP_CLUES.get(kind)
-    if arity is None:
-        raise ValueError(f"unknown clue {kind!r}")
-    for who in args[:arity]:
-        if who not in board.people:
-            raise ValueError(f"clue {kind} {' '.join(args)} names unknown person {who!r}")
-
-    if kind in FILTERS:
-        person, *rest = args
-        allowed = FILTERS[kind](board, *rest)
-        label = " ".join([kind, *args])
-        for sq in board.free:
-            if not allowed(sq):
-                model.eliminate(model.literal(person, sq), "clue", label)
-    elif kind in RELATIONS:
-        a, b, *rest = args
-        model.relate(" ".join([a, kind, b, *rest]), (a, b), RELATIONS[kind](board, *rest))
-    elif kind == "alone":
-        (a,) = args
-        for p in board.people:
-            if p != a:
-                name = f"{a} alone in region, so not with {p}"
-                model.relate(name, (a, p), _different_region(board))
-    elif kind == "furthest":
-        a, b = args
-        for p in board.people:
-            if p not in (a, b):
-                model.relate(f"{a} further from {b} than {p}", (a, b, p), _further)
-
-
-def _further(a: Square, b: Square, other: Square) -> bool:
-    return steps_between(a, b) > steps_between(other, b)
 
 
 # --- rendering ------------------------------------------------------------
