@@ -692,11 +692,23 @@ def rule_what_if(model: Model) -> bool:
     Sound because every rule used on the copy is sound: a contradiction
     reached from "x holds" proves x cannot hold. Only cheap rules run on the
     copy, never what-if itself, so the search stays one level deep. Variables
-    with the fewest options are tried first, as a person would.
+    with the fewest options are tried first, as a person would; of the first
+    variable's refutable values, the one with the shortest trail to its
+    contradiction is ruled out, the simplest case split to explain.
     """
     undecided = [var for var in model.variables if model.chosen(var) is None]
     for var in sorted(undecided, key=lambda v: len(model.options(v))):
-        if any(refute(model, lit) for lit in model.options(var)):
+        best: tuple[int, LiteralId, tuple[str, tuple[Step, ...], str | None]] | None = None
+        for lit in model.options(var):
+            if model.is_true(lit):
+                continue
+            refutation = _refute(model, lit)
+            if refutation is not None and (best is None or len(refutation[1]) < best[0]):
+                best = (len(refutation[1]), lit, refutation)
+        if best is not None:
+            _, lit, (reason, trail, broken) = best
+            sources = () if broken is None else (broken,)
+            model.eliminate(lit, "what_if", reason, sources=sources, trail=trail)
             return True
     return False
 

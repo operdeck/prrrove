@@ -153,6 +153,21 @@ def test_what_if_eliminates_a_literal_that_leads_to_contradiction():
     assert m.is_false(m.literal("x", 1))
 
 
+def test_what_if_rules_out_the_value_with_the_shortest_refutation():
+    """x=1 comes first but fails only after y and z follow it; x=2 fails at
+    once, so x=2 is the one ruled out."""
+    m = Model()
+    for var in "xyz":
+        _variable(m, var, (1, 2))
+    m.relate("x is never 2", "xy", lambda x, y: x != 2)
+    m.relate("y follows x", "xy", lambda x, y: x != 1 or y == 1)
+    m.relate("z follows y", "yz", lambda y, z: y != 1 or z == 1)
+    m.relate("z avoids x", "xz", lambda x, z: x != 1 or z != 1)
+    assert rule_what_if(m) is True
+    (step,) = m.log
+    assert (step.var, step.value) == ("x", 2)
+
+
 # --- sudoku ---------------------------------------------------------------
 
 
