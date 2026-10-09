@@ -286,3 +286,26 @@ examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
                  need), prrrdoku1-3.txt
 tests/           test_solver.py, test_picture.py, test_story.py
 ```
+
+## TODO
+
+**Generate the whole Prrrdoku document** from its puzzle file, not just the
+pictures (`--png`) and the worked solution (`--explain`). Not done on
+purpose for now: the hand-written clue wording ("Jos doet een dutje op een
+bank", "nog steeds") has charm the templates lack. If it is ever wanted:
+
+- **Already derivable:** board and solution pictures, the colour legend with
+  hatched regions starred, board facts for the rules (size, regions, figures,
+  1 × 2 banks), the clue list (template wording), the worked solution.
+- **Add to the puzzle file:** `Title:`, free-text `Notes:` for puzzle-specific
+  rules, `Cats:`, and optional per-clue text that overrides the template
+  (e.g. `on Jos bank | Jos doet een dutje op een bank.`), so the charm stays.
+- **Model the question** (`Question: lap Vladimir`) and compute the answer
+  bullet from the solution, so the answer is checked like everything else.
+- **Build it** in a new `booklet.py` behind `--docx FILE`, assembling what
+  `puzzlefile`, `story` and `picture` already produce; core stays untouched
+  and the layering test gets a line for it. Use `python-docx` as an optional
+  extra (like Pillow), starting from one of the current documents as the
+  style template.
+- **Test** by generating all three and comparing their text with
+  `prrrdokus/` (worked solutions aside).
