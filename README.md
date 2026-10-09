@@ -40,10 +40,11 @@ He was alone with his murderer.
 <br>
 
 - **The direct clues.** Ingrid is on a chair (1): r3c1, r3c4 or r4c3. Joost
-  is next to the tree (2): r1c1. Lotte is on the bed (3): r4c1 or r4c2.
-- **The rest.** **Joost on r1c1**. Joost takes column 1, so **Lotte on
-  r4c2**. Lotte takes row 4 and Joost takes column 1, so **Ingrid on r3c4**.
-  Only r2c3 is left for Wouter: **Wouter on r2c3**.
+  is next to the tree (2): **Joost on r1c1**. Lotte is on the bed (3): r4c1
+  or r4c2.
+- **Lotte, Ingrid and Wouter.** Joost takes column 1, so **Lotte on r4c2**.
+  Lotte takes row 4 and Joost takes column 1, so **Ingrid on r3c4**. Only
+  r2c3 is left for Wouter: **Wouter on r2c3**.
 
 <img src="docs/images/murdoku_intro-solution.png" width="300" alt="The solution">
 
@@ -143,6 +144,7 @@ the rules run out or hit a contradiction, and 2 when the file cannot be read.
 | `sudoku_swordfish.txt` | `cover3` |
 | `sudoku_what_if.txt` | `what_if` |
 | `murdoku_intro.txt` | `single` only: the 4×4 first case above |
+| `murdoku_house.txt` | `relations`, `subsumption`: a 5×5 using "not next to" and a counting clue |
 | `prrrdoku1.txt` | `relations`, `subsumption` |
 | `prrrdoku2.txt` | `cover2`, `cover3`, `what_if` |
 | `prrrdoku3.txt` | `what_if`, many times |
@@ -301,6 +303,7 @@ Rules:          # optional; clues that come with the board, not numbered
   outside Tim water
 Clues:          # numbered 1, 2, ... in the order given
   next_to Tim klimwand               # beside any of the named things, same region
+  not_next_to Ben lamp               # beside none of them
   knight_from Tim klimwand boulder   # a knight's move from any of them
   on Jos bank                        # on a piece of furniture
   in_region Jos keukenwinkel         # any number of regions or groups
@@ -314,10 +317,19 @@ Clues:          # numbered 1, 2, ... in the order given
   at_least Tim Pip 6            # at least 6 steps apart
   alone Luna                    # nobody else in Luna's region
   furthest Luna Mao             # Luna is strictly further from Mao than anyone
+  exactly 1 in_region Ada study ; in_region Ben hall   # exactly n of these hold
 ```
 
 `alone` and `furthest` expand to one relation per other person; `furthest`
 is a three-way relation (Luna, Mao, that person).
+
+`exactly n <clue> ; <clue> ...` counts simple clues (any of the one- and
+two-person clues above). Together they may name at most three people: the
+engine checks a relation by trying every combination of its people's
+squares, which grows quickly.
+
+There is no "two people next to each other" clue: with one person per row
+and column, two people never share a side, so it could never hold.
 
 `next_to` follows Murdoku's general rule that being next to something never
 crosses a region boundary. Distance (`within`, `at_least`, `furthest`),
@@ -413,3 +425,24 @@ bank", "nog steeds") has charm the templates lack. If it is ever wanted:
   style template.
 - **Test** by generating all three and comparing their text with the
   local source documents (worked solutions aside).
+
+**Writing puzzle files from plain-language clues** is left to an LLM: give
+it the clue vocabulary under [Puzzle files](#puzzle-files) and the
+sentences, and let it write the `Clues:` section. Then check the result
+with `--explain`, which reads each clue back in words, and with
+`--brute-force`, since a misread clue almost always gives no solution or
+several. A hand-written sentence parser is not planned.
+
+### Possible improvements
+
+- **Big sum cages.** A Calcudoku cage is checked by trying every
+  combination of its cells' numbers, which slows down sharply for cages of
+  six or seven cells. Cheaper, human-style steps would help: *bounds*
+  ("the other four cells need at least 10, so this one is at most 5") and
+  *virtual cages* (a row adds up to 1 + 2 + ... + n, so the cells a row's
+  cages leave over must make up the difference). Both would also open the
+  door to Killer Sudoku and Kakuro.
+- **Chains.** Follow implications from one candidate to the next ("if Otto
+  is here, Pip must be there, so ...") until a contradiction. This covers
+  what `what_if` does now, but reads the way a person reasons, so
+  `--explain` would say more than "X cannot be on r1c7: then ...".
