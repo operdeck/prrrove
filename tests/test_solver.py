@@ -217,6 +217,18 @@ def test_graded_sudoku_stalls_without_its_rule(name, rule, pattern):
 def test_sudoku_rejects_a_malformed_grid():
     with pytest.raises(ValueError):
         sudoku.parse("1 2 3\n4 5 6")
+    with pytest.raises(ValueError, match="4 or 9"):
+        sudoku.parse("\n".join([". " * 5] * 5))
+    with pytest.raises(ValueError, match="go up to 4"):
+        sudoku.parse("5 . . .\n. . . .\n. . . .\n. . . .")
+
+
+def test_mini_sudoku_has_two_by_two_boxes():
+    model, grid = sudoku.compile_puzzle((EXAMPLES / "sudoku_4x4.txt").read_text())
+    boxes = [c for c in model.constraints if c.family == "each digit once per box"]
+    assert len(grid) == 4 and len(boxes) == 4 * 4
+    assert all(len(c.literals) == 4 for c in boxes)
+    assert Solver(model).solve().solved
 
 
 # --- murdoku --------------------------------------------------------------
