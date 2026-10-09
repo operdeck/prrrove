@@ -189,7 +189,7 @@ Objects:        # name: square... — blocks those squares; names may repeat
 Furniture:      # optional; name: square... — can be stood on
 People:         # one per line, count must equal Size
 Clues:
-  next_to Tim klimwand               # beside any of the named things
+  next_to Tim klimwand               # beside any of the named things, same region
   knight_from Tim klimwand boulder   # a knight's move from any of them
   on Jos bank                        # on a piece of furniture
   in_region Jos keukenwinkel         # any number of regions or groups
@@ -207,6 +207,10 @@ Clues:
 
 `alone` and `furthest` expand to one relation per other person; `furthest`
 is a three-way relation (Luna, Mao, that person).
+
+`next_to` follows Murdoku's general rule that being next to something never
+crosses a region boundary. Distance (`within`, `at_least`, `furthest`),
+direction (`above`, `left_of`) and `knight_from` do cross regions.
 
 ## Layout
 

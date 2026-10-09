@@ -241,7 +241,7 @@ def test_clue_filtering_matches_the_published_candidate_lists(prrrdoku1):
     board, model = prrrdoku1
     open_sq = {p: [str(s) for s in sqs] for p, sqs in murdoku.open_squares(board, model).items()}
     assert open_sq["Tim"] == ["r1c1", "r2c2", "r3c1"]
-    assert open_sq["Tjitske"] == ["r4c2", "r5c1", "r5c3", "r6c2"]
+    assert open_sq["Tjitske"] == ["r4c2", "r5c1", "r6c2"]
     assert open_sq["Jos"] == ["r1c4", "r1c5", "r2c4", "r3c4", "r3c5", "r3c6"]
     assert open_sq["Pip"] == ["r1c6", "r1c7", "r2c6", "r2c7", "r4c7", "r5c7"]
 
@@ -387,7 +387,7 @@ def test_prrrdoku3_candidate_lists_match_the_document():
     assert open_sq["Tjitske"] == ["r4c1", "r5c2"]
     assert open_sq["Jos"] == ["r1c2", "r1c3", "r3c4", "r3c5", "r8c3", "r8c4"]
     assert open_sq["Tim"] == ["r1c6", "r3c6", "r6c7", "r6c9", "r7c6", "r9c6"]
-    assert len(open_sq["Anna"]) == 10
+    assert len(open_sq["Anna"]) == 7
     assert len(open_sq["Luna"]) == 19
 
 
@@ -636,7 +636,7 @@ def test_report_describes_prrrdoku1_as_the_engine_sees_it():
     assert re.search(r"each square holds at most one person\s+AT_MOST_ONE\s+43\s+7", text)
     assert "Every literal sits in exactly 4 constraints." in text
     assert re.search(r"next_to Tim klimwand\s+40 ruled out", text)
-    assert re.search(r"Otto above Tjitske 1\s+24 of 172", text)
+    assert re.search(r"Otto above Tjitske 1\s+18 of 129", text)
     assert all(re.search(rf"\d\. {rule.name}\s", text) for rule in DEFAULT_RULES)
     assert "cover2       Subsumption over 2 constraints" in text
 

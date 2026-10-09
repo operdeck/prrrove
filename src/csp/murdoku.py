@@ -147,8 +147,12 @@ def _outside(board: Board, *names: str) -> SquareTest:
 
 
 def _next_to(board: Board, *things: str) -> SquareTest:
+    """Beside one of the things, in the same region: Murdoku's general rule is
+    that 'next to' never crosses a region boundary."""
     targets = board.squares_of(things)
-    return lambda sq: any(steps_between(sq, t) == 1 for t in targets)
+    return lambda sq: any(
+        steps_between(sq, t) == 1 and board.region_of(t) == board.region_of(sq) for t in targets
+    )
 
 
 def _knight_from(board: Board, *things: str) -> SquareTest:

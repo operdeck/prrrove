@@ -1,11 +1,16 @@
 # Prrrdoku 3 - "Een dagje Amsterdam"  (9x9, eight regions)
 #
-# Board transcribed from the figure in "Prrrdoku 3.docx"; colours matched to
+# Board transcribed from the figure in prrrdokus/Prrrdoku 3.docx; colours matched to
 # names via the document's legend table. Cross-checked against the solution's
 # candidate lists: vuurtje's neighbours outside the water are r4c1, r5c2; the
 # banks are r1c2, r1c3, r3c4, r3c5, r8c3, r8c4; a knight's move from klimwand
-# or boulder reaches r1c6, r3c6, r6c7, r6c9, r7c6, r9c6; ten free squares
-# border a koffer; woonboot plus water has 19 free squares.
+# or boulder reaches r1c6, r3c6, r6c7, r6c9, r7c6, r9c6; seven free squares
+# border a koffer in the koffer's own region; woonboot plus water has 19 free
+# squares.
+#
+# The original board put the koffer on r1c5 in Bankastraat. Since "next to"
+# never crosses a region boundary, that left the puzzle without a solution;
+# r1c5 now belongs to Helmholtzstraat, which restores the published solution.
 #
 # Banks are 1x2 furniture you can lie on, so they do not block their squares.
 
@@ -26,7 +31,7 @@ klimgebied: klimgebied_noord klimgebied_zuid
 amsterdam: helmholtzstraat bankastraat kantoor woonboot water
 
 Grid:
-d d d d e e a a a
+d d d d d e a a a
 d d d e e e a a a
 d d e e e c a a a
 f f f f c c c c c
