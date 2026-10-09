@@ -162,7 +162,8 @@ than listing it as working.
    rule definitions (what a clue or cage *means*) in one place that both the
    compiler and the brute force call, as `murdoku.conditions` does.
    Sudoku's `Puzzle.houses()` is the same idea for groups: Jigsaw boxes and
-   X-Sudoku diagonals are defined once and used by compiler, brute force and
+   extra houses (`Extra:`, for NRC boxes and X-Sudoku diagonals alike) are
+   defined once and used by compiler, brute force and
    picture alike.
 7. Test against an **independent** source of truth — a published solution,
    the brute force, or a property check (permutation, givens preserved).
@@ -184,6 +185,7 @@ Numbers from actual runs, not estimates:
 | `sudoku_chains.txt` | solved, 74 iterations | `single` 55, `subsumption` 9, `chains` 6, `cover2` 3 |
 | `sudoku_x.txt` | solved, 56 iterations | `single` 55 (two solutions without its diagonals) |
 | `sudoku_jigsaw.txt` | solved, 35 iterations | `single` 30, `subsumption` 3, `cover2` 1 |
+| `sudoku_nrc.txt` | solved, 54 iterations | `single` 53 (two solutions without its extra boxes) |
 | `futoshiki_5x5.txt` | solved, 49 iterations | `single` 25, `relations` 12, `chains` 8, `cover2` 3 |
 | `murdoku_intro.txt` | solved, 5 iterations | `single` 4 |
 | `murdoku_house.txt` | solved, 11 iterations | `single` 5, `relations` 4, `subsumption` 1 |

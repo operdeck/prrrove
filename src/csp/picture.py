@@ -31,7 +31,7 @@ from .sudoku import cell_name as sudoku_cell
 INK = (26, 26, 26)
 WHITE = (255, 255, 255)
 SOLVED = (33, 90, 200)  # numbers the solver filled in
-DIAGONAL = (255, 241, 196)  # X-Sudoku's diagonal houses
+EXTRA = (214, 214, 214)  # extra houses, grey as NRC prints them
 THIN = (190, 190, 190)
 # Used for regions the puzzle file gives no colour.
 PALETTE = ["#F3C8C0", "#FADFB5", "#CBE6B9", "#D8D2F0", "#C4DCF2", "#BEE5D6", "#F3EDA2",
@@ -111,18 +111,21 @@ def sudoku_picture(
 ) -> Image.Image:
     """The grid with its givens, and the solved numbers in blue if given.
 
-    Square boxes are shaded alternately; jigsaw boxes get a pastel each. In
-    X-Sudoku the two diagonals are tinted.
+    Square boxes are shaded alternately; jigsaw boxes get a pastel each.
+    Extra houses (NRC boxes, X-Sudoku diagonals) are grey.
     """
     n, grid, boxes = puzzle.size, puzzle.grid, puzzle.boxes
     fills = _group_fills({(r, c): boxes[r][c] for r in range(n) for c in range(n)})
     box = box_size(n)
+    extra = {cell for cells in puzzle.extra_houses().values() for cell in cells}
 
     def shade(r: int, c: int) -> RGB:
-        if puzzle.diagonals and (r == c or r + c == n - 1):
-            return DIAGONAL
+        if (r, c) in extra:
+            return EXTRA
         if puzzle.jigsaw:
             return fills[boxes[r][c]]
+        if extra:
+            return WHITE
         return (238, 242, 250) if (r // box + c // box) % 2 else WHITE
 
     def number(r: int, c: int) -> tuple[int | None, RGB]:

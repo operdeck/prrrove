@@ -3,7 +3,7 @@
 **Solves logic puzzles the way a person would, and writes down how.**
 
 One small constraint engine, several puzzle families: **Murdoku** (any size),
-**Sudoku** (with Jigsaw and X-Sudoku variants), **Calcudoku/KenKen** and
+**Sudoku** (with Jigsaw, X-Sudoku and NRC variants), **Calcudoku/KenKen** and
 **Futoshiki**. Each puzzle is compiled down to literals
 and constraints, and solved by named deduction rules — no search — so every
 step can be explained. The rules never learn which puzzle they are solving.
@@ -91,27 +91,43 @@ multiplies to 12, <code>2/</code> divides to 2.</td>
 ./solve.sh examples/calcudoku_4x4_easy.txt --png calcudoku.png
 ```
 
-Two Sudoku variants and one more Latin square: a Sudoku with irregular boxes
-(Jigsaw), one whose two diagonals hold every digit once too (X-Sudoku), and
-Futoshiki, where signs between cells point at the smaller number.
+### Variants by generalising, not by new code
+
+Many puzzle variants are an existing puzzle with its rules *generalised*:
+more groups that must hold every digit once, or a different shape for them.
+The engine never knew what a box was in the first place, so a variant is
+only a few lines in the puzzle file and the compiler, with no new deduction
+rule:
+
+- **Jigsaw Sudoku**: boxes of any shape (`Boxes:`).
+- **X-Sudoku**: the two main diagonals are houses too. They are written as
+  two extra houses (below); the centre cell is on both.
+- **NRC Sudoku** (also sold as Hyper Sudoku or Windoku), from the Dutch
+  newspaper: four extra grey 3 × 3 boxes, overlapping the nine ordinary
+  ones, follow the same rule (`Extra:`). Any other set of extra houses
+  works the same way, X-Sudoku's diagonals included.
+- **Futoshiki** is a Calcudoku without cages: the same Latin square, with
+  one two-cell relation ("smaller than") per sign.
 
 <table>
 <tr>
 <th>Jigsaw Sudoku</th>
 <th>X-Sudoku</th>
+<th>NRC Sudoku</th>
 <th>Futoshiki</th>
 </tr>
 <tr>
-<td><img src="docs/images/sudoku_jigsaw.png" width="230" alt="A 6 by 6 Jigsaw Sudoku"></td>
-<td><img src="docs/images/sudoku_x.png" width="230" alt="A 9 by 9 X-Sudoku"></td>
-<td><img src="docs/images/futoshiki_5x5.png" width="230" alt="A 5 by 5 Futoshiki with no givens"></td>
+<td><img src="docs/images/sudoku_jigsaw.png" width="190" alt="A 6 by 6 Jigsaw Sudoku"></td>
+<td><img src="docs/images/sudoku_x.png" width="190" alt="A 9 by 9 X-Sudoku"></td>
+<td><img src="docs/images/sudoku_nrc.png" width="190" alt="A 9 by 9 NRC Sudoku with four grey extra boxes"></td>
+<td><img src="docs/images/futoshiki_5x5.png" width="190" alt="A 5 by 5 Futoshiki with no givens"></td>
 </tr>
 </table>
 
-None of them needed a new rule. A Jigsaw box and an X-Sudoku diagonal are
-just more "each digit once" groups, and a Futoshiki sign is a relation
-between two cells, so it also gives `chains` its links. The Futoshiki above
-has no givens at all and needs `chains`.
+The X-Sudoku and the NRC Sudoku would each have two solutions without their
+extra houses. A Futoshiki sign, being a two-cell relation, also gives
+`chains` its links: the Futoshiki above has no givens at all and needs
+`chains`.
 
 Sudoku is 4 × 4 or 9 × 9, Jigsaw Sudoku and Futoshiki 4 × 4 to 9 × 9,
 Calcudoku any size.
@@ -174,6 +190,7 @@ file cannot be read.
 | `sudoku_chains.txt` | `chains` |
 | `sudoku_x.txt` | `single` only, but it uses the diagonals: without them it has two solutions |
 | `sudoku_jigsaw.txt` | `cover2`: a 6×6 with irregular boxes |
+| `sudoku_nrc.txt` | `single` only, but it uses its four grey boxes: without them it has two solutions |
 | `futoshiki_5x5.txt` | `chains`: no givens, eight signs |
 | `murdoku_intro.txt` | `single` only: the 4×4 first case above |
 | `murdoku_house.txt` | `relations`, `subsumption`: a 5×5 using "not next to" and a counting clue |
@@ -220,7 +237,7 @@ square is only possible for Vladimir" says nothing at all.
 | Variable | a cell | a **person** | a cell | a cell |
 | Literal | cell holds digit | person stands on square | cell holds number | cell holds number |
 | `EXACTLY_ONE` | cell holds one digit | person stands somewhere | cell holds one number | cell holds one number |
-| | digit once per row / col / box (/ diagonal) | one person per row; one per column | number once per row / col | number once per row / col |
+| | digit once per row / col / box (/ extra house) | one person per row; one per column | number once per row / col | number once per row / col |
 | `AT_MOST_ONE` | — | square holds at most one person | — | — |
 | Relations | — | position, distance and region clues; see [Puzzle files](#puzzle-files) | one per cage: its arithmetic | one per sign: smaller < larger |
 
@@ -228,7 +245,8 @@ A Calcudoku is a Sudoku without boxes plus one relation per cage. The cage
 relation also requires distinct numbers where its cells share a row or
 column, so arc consistency rules out "3+3" inside a line without help.
 A Futoshiki is the same Latin square with one two-cell relation per sign.
-Jigsaw boxes and X-Sudoku diagonals are more `EXACTLY_ONE` families, built
+Jigsaw boxes and extra houses (X-Sudoku diagonals, NRC boxes) are more
+`EXACTLY_ONE` families, built
 from one list of the puzzle's houses that the compiler, the brute force and
 the pictures all share.
 
@@ -309,7 +327,7 @@ dependency-free, but none of them written for one puzzle.
 ## Verification
 
 ```bash
-uv run pytest -q                        # 218 tests
+uv run pytest -q                        # 224 tests
 uvx ruff check src tests benchmark      # lint
 uvx ruff format --check src tests benchmark   # formatting
 uv run mypy src                         # strict type check
@@ -366,7 +384,6 @@ Sudoku is a plain 4 × 4 or 9 × 9 grid; `.`/`0` are blanks, and `|`/`-` are
 ignored. For the variants, put the grid under `Givens:` and add:
 
 ```
-Diagonals: yes   # X-Sudoku: both main diagonals hold every digit once
 Givens:
 . . . . 3 4      # any size 4 to 9 when Boxes: is given
 ...
@@ -374,7 +391,18 @@ Boxes:           # Jigsaw: a letter per cell; N boxes of N cells each
 a a a b b b
 a c a b d b
 ...
+Extra:           # extra houses of N cells: per cell '.' or its house letters
+x . . . . . . . y
+. x . . . . . y .
+...
+. . . . xy . . . .
+...
 ```
+
+The `Extra:` above is X-Sudoku: diagonals `x` and `y`, the centre cell on
+both. NRC Sudoku marks its four grey boxes `a` to `d` the same way; see
+[examples/sudoku_x.txt](examples/sudoku_x.txt) and
+[examples/sudoku_nrc.txt](examples/sudoku_nrc.txt).
 
 Futoshiki is a grid of givens and dots, then one sign per line between
 neighbouring cells (either way round):
@@ -494,7 +522,8 @@ legend. Because it is drawn from the same file the solver reads, the picture
 cannot disagree with the puzzle. Sudoku, Calcudoku and Futoshiki pictures
 share the look: thick lines around boxes or cages, alternate boxes shaded,
 Jigsaw boxes and cages in pastels that never match a neighbour, each cage's
-target in its corner, X-Sudoku diagonals tinted, and each Futoshiki sign
+target in its corner, extra houses (X-Sudoku diagonals, NRC boxes) grey as
+NRC prints them, and each Futoshiki sign
 drawn as a chevron on the cell edge.
 
 Icons are referenced, not stored in the repo: `src/csp/icons.py` maps object
@@ -513,7 +542,7 @@ and code point to `CATALOGUE`.
 src/csp/
   core.py        engine: literals, constraints, relations, rules, solver
   proof.py       a short replayable proof of a solve (any puzzle family)
-  sudoku.py      Sudoku compiler + renderer, including Jigsaw and X-Sudoku
+  sudoku.py      Sudoku compiler + renderer, including Jigsaw, X-Sudoku and NRC
   calcudoku.py   Calcudoku/KenKen compiler + renderer with pencil marks
   futoshiki.py   Futoshiki compiler + renderer with pencil marks
   murdoku.py     Murdoku compiler + renderer + clue vocabulary and meaning

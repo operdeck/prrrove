@@ -3,20 +3,27 @@
 Literals are "cell holds digit". The constraint families are the whole of
 Sudoku:
   * each cell holds exactly one digit
-  * each digit sits exactly once in each house: row, column, box
-    (and, in X-Sudoku, each main diagonal)
+  * each digit sits exactly once in each house: row, column, box, and any
+    extra houses (NRC Sudoku's grey boxes, X-Sudoku's diagonals)
 
 A plain file is just the grid: 9 x 9 with 3 x 3 boxes, or a 4 x 4 mini
 Sudoku with 2 x 2 boxes. A sectioned file can change the houses:
 
-    Diagonals: yes      # X-Sudoku; must come before the first section
     Givens:
     . . 3 .
     ...
     Boxes:              # Jigsaw Sudoku: a box id per cell, N boxes of N cells
     a a b b
     ...
+    Extra:              # extra houses of N cells: per cell '.' or its house ids
+    x . . . . . . . y
+    . x . . . . . y .
+    ...
+    . . . . xy . . . .
+    ...
 
+That `Extra:` is X-Sudoku: diagonals x and y, with the centre cell on both.
+NRC Sudoku's four grey boxes are written the same way.
 With `Boxes:` the grid may be any size from 4 to 9.
 """
 
@@ -29,6 +36,7 @@ from .puzzlefile import read_sections
 
 BLUE = "\033[94m"
 RESET = "\033[0m"
+WORDS = {"col": "column", "extra": "extra house"}
 
 type Grid = list[list[int]]
 type Cell = tuple[int, int]
@@ -36,12 +44,12 @@ type Cell = tuple[int, int]
 
 @dataclass(frozen=True)
 class Puzzle:
-    """The givens (0 for blank), a box id per cell, and whether the two main
-    diagonals are houses too."""
+    """The givens (0 for blank), a box id per cell, and any extra houses: per
+    cell '.' or the one-character ids of the extra houses it is in."""
 
     grid: Grid
     boxes: list[list[str]]
-    diagonals: bool = False
+    extra: list[list[str]] | None = None
 
     @property
     def size(self) -> int:
@@ -65,10 +73,16 @@ class Puzzle:
             for c in range(n):
                 cells_of.setdefault(self.boxes[r][c], []).append((r, c))
         houses += [("box", f"box {box}", cells) for box, cells in sorted(cells_of.items())]
-        if self.diagonals:
-            houses.append(("diagonal", "diagonal \\", [(i, i) for i in range(n)]))
-            houses.append(("diagonal", "diagonal /", [(i, n - 1 - i) for i in range(n)]))
+        houses += [("extra", f"extra house {e}", cells) for e, cells in self.extra_houses().items()]
         return houses
+
+    def extra_houses(self) -> dict[str, list[Cell]]:
+        cells_of: dict[str, list[Cell]] = {}
+        for r, row in enumerate(self.extra or []):
+            for c, ids in enumerate(row):
+                for house in ids.strip("."):
+                    cells_of.setdefault(house, []).append((r, c))
+        return dict(sorted(cells_of.items()))
 
 
 def cell_name(row: int, col: int) -> str:
@@ -88,7 +102,7 @@ def standard_boxes(size: int) -> list[list[str]]:
 
 
 def parse(text: str) -> Puzzle:
-    """Read a plain grid, or a sectioned file with Givens, Boxes and Diagonals."""
+    """Read a plain grid, or a sectioned file with Givens, Boxes and Extra."""
     if "Givens:" not in text:
         grid = _grid(text.splitlines())
         if len(grid) not in (4, 9):
@@ -97,11 +111,11 @@ def parse(text: str) -> Puzzle:
     section = read_sections(text)
     grid = _grid(section["Givens"])
     size = len(grid)
-    diagonals = section.get("Diagonals", ["no"])[0].lower() in ("yes", "true", "1")
+    extra = _extra(section["Extra"], size) if "Extra" in section else None
     if "Boxes" not in section:
         if size not in (4, 9):
             raise ValueError(f"grid has {size} rows; without Boxes: it must be 4 or 9")
-        return Puzzle(grid, standard_boxes(size), diagonals)
+        return Puzzle(grid, standard_boxes(size), extra)
     boxes = [line.split() for line in section["Boxes"]]
     if not 4 <= size <= 9:
         raise ValueError(f"a jigsaw grid is 4 to 9 cells wide, not {size}")
@@ -110,7 +124,21 @@ def parse(text: str) -> Puzzle:
     sizes = {box: sum(row.count(box) for row in boxes) for row in boxes for box in row}
     if len(sizes) != size or set(sizes.values()) != {size}:
         raise ValueError(f"Boxes needs {size} boxes of {size} cells, got {sorted(sizes.items())}")
-    return Puzzle(grid, boxes, diagonals)
+    return Puzzle(grid, boxes, extra)
+
+
+def _extra(lines: Sequence[str], size: int) -> list[list[str]]:
+    extra = [line.split() for line in lines]
+    if len(extra) != size or any(len(row) != size for row in extra):
+        raise ValueError(f"Extra is not {size}x{size}")
+    sizes: dict[str, int] = {}
+    for row in extra:
+        for ids in row:
+            for house in ids.strip("."):
+                sizes[house] = sizes.get(house, 0) + 1
+    if wrong := sorted(e for e, count in sizes.items() if count != size):
+        raise ValueError(f"extra houses {wrong} do not have {size} cells")
+    return extra
 
 
 def _grid(lines: Sequence[str]) -> Grid:
@@ -157,7 +185,7 @@ def compile_puzzle(text: str) -> tuple[Model, Puzzle]:
                 f"{d} once in {name}",
                 Kind.EXACTLY_ONE,
                 [model.literal(cell_name(r, c), d) for r, c in members],
-                family=f"each digit once per {'column' if family == 'col' else family}",
+                family=f"each digit once per {WORDS.get(family, family)}",
             )
 
     for row, col in cells:
@@ -170,9 +198,13 @@ def compile_puzzle(text: str) -> tuple[Model, Puzzle]:
 
 
 def render(puzzle: Puzzle, model: Model, title: str, steps: Sequence[Step] = ()) -> str:
-    """Draw the grid with its box walls, colouring the cells placed by `steps`."""
+    """Draw the grid with its box walls, colouring the cells placed by `steps`.
+
+    Open cells in an extra house show ':' rather than '.'.
+    """
     placed = {s.var for s in steps if s.asserted}
     n, boxes = puzzle.size, puzzle.boxes
+    extra = {cell for cells in puzzle.extra_houses().values() for cell in cells}
 
     def wall_below(r: int, c: int) -> bool:
         return r + 1 < n and boxes[r][c] != boxes[r + 1][c]
@@ -190,7 +222,7 @@ def render(puzzle: Puzzle, model: Model, title: str, steps: Sequence[Step] = ())
             name = cell_name(r, c)
             digit = model.chosen(name)
             if digit is None:
-                line += ". "
+                line += ": " if (r, c) in extra else ". "
             elif name in placed:
                 line += f"{BLUE}{digit}{RESET} "
             else:

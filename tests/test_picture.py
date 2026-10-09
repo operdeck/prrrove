@@ -221,13 +221,22 @@ def test_jigsaw_picture_colours_touching_boxes_apart():
             assert (_corner(image, r, c) == _corner(image, r, c + 1)) == same, (r, c)
 
 
-def test_x_sudoku_picture_tints_the_diagonals():
+def test_x_sudoku_picture_greys_the_diagonals():
     from csp import sudoku
 
     puzzle = sudoku.parse((EXAMPLES / "sudoku_x.txt").read_text())
     image = picture.sudoku_picture(puzzle, cell=CELL)
-    assert _corner(image, 0, 0) == _corner(image, 0, 8) == _corner(image, 4, 4) == picture.DIAGONAL
-    assert _corner(image, 0, 1) != picture.DIAGONAL
+    assert _corner(image, 0, 0) == _corner(image, 0, 8) == _corner(image, 4, 4) == picture.EXTRA
+    assert _corner(image, 0, 1) != picture.EXTRA
+
+
+def test_nrc_sudoku_picture_greys_the_extra_boxes():
+    from csp import sudoku
+
+    puzzle = sudoku.parse((EXAMPLES / "sudoku_nrc.txt").read_text())
+    image = picture.sudoku_picture(puzzle, cell=CELL)
+    assert _corner(image, 1, 1) == _corner(image, 7, 7) == picture.EXTRA
+    assert _corner(image, 0, 0) == _corner(image, 4, 4) == picture.WHITE
 
 
 def test_futoshiki_picture_points_each_sign_at_the_smaller_cell():

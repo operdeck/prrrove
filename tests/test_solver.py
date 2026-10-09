@@ -252,25 +252,43 @@ def test_mini_sudoku_has_two_by_two_boxes():
 
 def test_jigsaw_boxes_and_x_diagonals_are_houses():
     jigsaw = sudoku.parse((EXAMPLES / "sudoku_jigsaw.txt").read_text())
-    assert jigsaw.size == 6 and jigsaw.jigsaw and not jigsaw.diagonals
+    assert jigsaw.size == 6 and jigsaw.jigsaw and not jigsaw.extra_houses()
     boxes = [cells for family, _, cells in jigsaw.houses() if family == "box"]
     assert len(boxes) == 6 and all(len(cells) == 6 for cells in boxes)
     x = sudoku.parse((EXAMPLES / "sudoku_x.txt").read_text())
-    diagonals = [cells for family, _, cells in x.houses() if family == "diagonal"]
-    assert not x.jigsaw and diagonals == [
-        [(i, i) for i in range(9)],
-        [(i, 8 - i) for i in range(9)],
-    ]
+    assert not x.jigsaw and x.extra_houses() == {
+        "x": [(i, i) for i in range(9)],
+        "y": [(i, 8 - i) for i in range(9)],
+    }
 
 
 def test_x_sudoku_is_unique_only_because_of_its_diagonals():
     text = (EXAMPLES / "sudoku_x.txt").read_text()
     assert len(bruteforce.solutions(text)) == 1
-    plain = text.replace("Diagonals: yes", "Diagonals: no")
+    plain = text[: text.index("# The two diagonals")]
     assert len(bruteforce.solutions(plain)) == 2
     model, _ = sudoku.compile_puzzle(text)
     Solver(model).solve()
-    assert any("diagonal" in s.reason for s in model.log)
+    assert any("extra house" in s.reason for s in model.log)
+
+
+def test_nrc_sudoku_extra_boxes_are_houses_it_needs():
+    text = (EXAMPLES / "sudoku_nrc.txt").read_text()
+    puzzle = sudoku.parse(text)
+    extra = puzzle.extra_houses()
+    assert sorted(extra) == ["a", "b", "c", "d"]
+    assert extra["a"] == [(r, c) for r in range(1, 4) for c in range(1, 4)]
+    assert len(bruteforce.solutions(text)) == 1
+    plain = text[: text.index("Extra:")]
+    assert len(bruteforce.solutions(plain)) == 2
+
+
+def test_extra_houses_must_have_n_cells():
+    text = "Givens:\n" + ". . . .\n" * 4 + "Extra:\na a . .\na . . .\n. . . .\n. . . .\n"
+    with pytest.raises(ValueError, match="do not have 4 cells"):
+        sudoku.parse(text)
+    shared = "Extra:\nab a . .\na b . .\na b . .\n. b . .\n"
+    assert len(sudoku.parse(text[: text.index("Extra")] + shared).extra_houses()["b"]) == 4
 
 
 @pytest.mark.parametrize(
