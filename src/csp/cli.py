@@ -2,7 +2,7 @@
 
 import argparse
 import sys
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -14,11 +14,11 @@ from .puzzlefile import load_board
 
 @dataclass(frozen=True)
 class Puzzle:
-    """A compiled puzzle, and how to draw it with some variables highlighted."""
+    """A compiled puzzle, and how to draw it highlighting a batch of steps."""
 
     kind: str
     model: Model
-    draw: Callable[[str, Collection[str]], str]
+    draw: Callable[[str, Sequence[Step]], str]
 
 
 def detect(text: str) -> str:
@@ -91,7 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return
         narrate(rule, steps)
         if args.step:
-            print(puzzle.draw("After this step", {s.var for s in steps if s.asserted}))
+            print(puzzle.draw("After this step", steps))
             try:
                 input("\n[enter] ")
             except EOFError:

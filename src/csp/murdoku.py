@@ -16,14 +16,17 @@ kitchen") or become relations between two or three people ("Jos is left of
 Otto", "Luna is furthest from Mao").
 """
 
-from collections.abc import Callable, Collection, Iterable
+from collections import Counter
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 
-from .core import Kind, LiteralId, Model
+from .core import Kind, LiteralId, Model, Step
 
 RESET = "\033[0m"
 BOLD = "\033[1m"
 INK = "\033[38;5;233m"
+NEW = "\033[38;5;21m"  # blue: changed by the step just shown
+FADED = "\033[38;5;245m"
 # Pastel backgrounds, in the spirit of the printed board.
 PALETTE = [217, 223, 157, 183, 153, 158, 222, 211, 195]
 
@@ -301,10 +304,18 @@ def _further(a: Square, b: Square, other: Square) -> bool:
 # --- rendering ------------------------------------------------------------
 
 
-def render(board: Board, model: Model, title: str, highlight: Collection[str] = frozenset()) -> str:
-    """Draw the board, one colour per region, 4 columns per square."""
+def render(board: Board, model: Model, title: str, steps: Sequence[Step] = ()) -> str:
+    """Draw the board, one colour per region, 4 columns per square.
+
+    A square nobody can stand on any more is crossed out, as a person would
+    on paper. `steps`, the deductions just made, are highlighted: people
+    placed, squares newly crossed out, and whose options narrowed.
+    """
     blocked = board.blocked
     furnished = board.squares_of(board.furniture)
+    reachable = _reachable(board, model)
+    placed = {s.var for s in steps if s.asserted}
+    eliminated = {s.value for s in steps if not s.asserted}
     at: dict[Square, str] = {}
     for person in board.people:
         square = model.chosen(person)
@@ -322,8 +333,11 @@ def render(board: Board, model: Model, title: str, highlight: Collection[str] = 
                 body = f"{INK} ## "
             elif sq in at:
                 person = at[sq]
-                tint = "\033[38;5;21m" if person in highlight else INK
+                tint = NEW if person in placed else INK
                 body = f"{tint}{person[:3]:^4}"
+            elif sq not in reachable:
+                tint = f"{BOLD}{NEW}" if sq in eliminated else FADED
+                body = f"{tint} x  "
             elif sq in furnished:
                 body = f"{INK} =  "
             else:
@@ -331,11 +345,17 @@ def render(board: Board, model: Model, title: str, highlight: Collection[str] = 
             line += colour + body + RESET
         out.append(line)
 
+    open_count = len(reachable - set(at))
+    empty_count = len(board.free) - len(at)
+    out.append(f"\n  {open_count} of {empty_count} empty squares still possible for someone")
+    out += _narrowed(board, model, steps)
+
     out.append("")
     for rid in sorted(board.region_names):
         swatch = _bg(PALETTE[rid % len(PALETTE)]) + "   " + RESET
         out.append(f"  {swatch} {board.region_names[rid]}")
-    out.append(f"\n  {INK}##{RESET} object   =  furniture   .  empty")
+    out.append(f"\n  {INK}##{RESET} object   =  furniture   .  open   x  nobody can stand here")
+    out.append(f"  {NEW}blue{RESET}: changed by this step")
     for label, things in (("objects", board.objects), ("furniture", board.furniture)):
         if things:
             listed = ", ".join(
@@ -344,6 +364,25 @@ def render(board: Board, model: Model, title: str, highlight: Collection[str] = 
             )
             out.append(f"  {label}: {listed}")
     return "\n".join(out)
+
+
+def _reachable(board: Board, model: Model) -> set[Square]:
+    """Squares at least one person can still stand on."""
+    return {model.value_of(lit) for p in board.people for lit in model.options(p)}
+
+
+def _narrowed(board: Board, model: Model, steps: Sequence[Step]) -> list[str]:
+    """One line per open person who lost options in `steps`."""
+    lost = Counter(s.var for s in steps if not s.asserted and model.chosen(s.var) is None)
+    if not lost:
+        return []
+    lines = ["  narrowed by this step:"]
+    for person in board.people:
+        if person in lost:
+            left = sorted(model.value_of(lit) for lit in model.options(person))
+            listed = " ".join(map(str, left[:8])) + (" ..." if len(left) > 8 else "")
+            lines.append(f"    {person:<9} -{lost[person]:<3} {len(left):>2} left: {listed}")
+    return lines
 
 
 def open_squares(board: Board, model: Model) -> dict[str, list[Square]]:

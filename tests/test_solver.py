@@ -332,6 +332,36 @@ def test_people_count_must_match_board_size():
         murdoku.Board(3, [[0] * 3] * 3, {0: "a"}, {}, ["only", "two"])
 
 
+def test_relations_prunes_a_whole_relation_in_one_step():
+    m = Model()
+    _variable(m, "a", (1, 2, 3, 4))
+    _variable(m, "b", (1, 2, 3, 4))
+    m.relate("a below 2 and b above 3", "ab", lambda a, b: a < 2 and b > 3)
+    assert rule_relations(m) is True
+    assert [m.value_of(lit) for lit in m.options("a")] == [1]
+    assert [m.value_of(lit) for lit in m.options("b")] == [4]
+    assert rule_relations(m) is False
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def test_render_crosses_out_squares_nobody_can_reach():
+    board = murdoku.Board(2, [[0, 0], [0, 0]], {0: "here"}, {}, ["A", "B"])
+    model = murdoku.compile_puzzle(board, [("in_region", ["A", "here"])])
+    sq = murdoku.Square
+    model.eliminate(model.literal("A", sq(0, 0)), "test", "gone")
+    rows = _plain(murdoku.render(board, model, "t")).splitlines()[3:5]
+    assert [row.split() for row in rows] == [["1", ".", "."], ["2", ".", "."]]
+    steps_from = len(model.log)
+    model.eliminate(model.literal("B", sq(0, 0)), "test", "gone")
+    drawn = murdoku.render(board, model, "t", model.log[steps_from:])
+    assert _plain(drawn).splitlines()[3].split() == ["1", "x", "."]
+    assert "3 of 4 empty squares still possible" in _plain(drawn)
+    assert re.search(r"B\s+-1\s+3 left", _plain(drawn))
+
+
 def test_parse_square_rejects_garbage():
     assert parse_square("R2C5") == murdoku.Square(1, 4)
     with pytest.raises(ValueError):

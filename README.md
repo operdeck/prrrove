@@ -63,7 +63,7 @@ Applied cheapest-first; any success restarts the ladder.
 | Rule | What it does |
 |---|---|
 | `single` | An `EXACTLY_ONE` with one option left forces it. |
-| `relations` | Arc consistency: drop a choice no combination of the other variables supports. |
+| `relations` | Arc consistency: drop every value of a relation that no combination of the other variables' values supports. |
 | `subsumption` | If `live(A) ⊆ live(B)` and A is `EXACTLY_ONE`, every B-literal outside A is false. |
 | `cover2`, `cover3` | The same over *k* constraints: *k* disjoint `EXACTLY_ONE`s whose live literals fit inside *k* others use those others up. |
 | `what_if` | Assume a literal on a copy, run `single`/`relations`/`subsumption`; if that contradicts, the literal is false. |

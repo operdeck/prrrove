@@ -93,7 +93,9 @@ than listing it as working.
    cell-centric shape produced an unsatisfiable model.
 3. Express every rule as `EXACTLY_ONE` / `AT_MOST_ONE` sets, plus relations
    (over two or more variables) for clues that link people.
-4. A `render(..., title, highlight) -> str` function; `highlight` is a set
+4. A `render(..., title, steps) -> str` function. `steps` are the deductions
+   just made; show what they changed, including eliminations a person would
+   mark on paper (Murdoku crosses out squares nobody can reach).
    of variable names.
 5. Wire into `cli.detect` and `cli.load`.
 6. Test against an **independent** source of truth — a published solution, or
@@ -113,9 +115,9 @@ Numbers from actual runs, not estimates:
 | `sudoku_xwing.txt` | solved, 57 iterations | `single` 54, `cover2` 2 |
 | `sudoku_swordfish.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `cover3` 1 |
 | `sudoku_what_if.txt` | solved, 66 iterations | `single` 55, `subsumption` 6, `cover2` 2, `what_if` 2 |
-| `prrrdoku1.txt` | solved, 88 iterations | `relations` 79, `single` 7, `subsumption` 1 |
-| `prrrdoku2.txt` | solved, 162 iterations | `relations` 149, `single` 9, `cover3` 1, `cover2` 1, `what_if` 1 |
-| `prrrdoku3.txt` | solved, 147 iterations | `relations` 121, `what_if` 12, `single` 9, `subsumption` 4 |
+| `prrrdoku1.txt` | solved, 16 iterations | `relations` 7, `single` 7, `subsumption` 1 |
+| `prrrdoku2.txt` | solved, 22 iterations | `relations` 9, `single` 9, `cover3` 1, `cover2` 1, `what_if` 1 |
+| `prrrdoku3.txt` | solved, 42 iterations | `relations` 16, `what_if` 12, `single` 9, `subsumption` 4 |
 
 The graded Sudokus were generated (random minimal puzzles, uniqueness checked
 by backtracking) and picked because each needs its rule: the tests cut the
@@ -143,7 +145,7 @@ would explain that more like a person does.
   in the document's worked solution before trusting it.
 - "Only Luna may stand in the water" is a board rule, written out as one
   `outside` clue per other person in `prrrdoku3.txt`.
-- `relations` is plain arc consistency and re-scans every relation from
-  scratch on each pass; it accounts for most Prrrdoku iterations. Three-way
+- `relations` re-scans every relation from scratch on each pass (it prunes
+  a whole relation per firing, so there are few passes). Three-way
   relations (`furthest`) make each scan quadratic in domain size. A
-  dirty-variable queue would cut both.
+  dirty-variable queue would skip relations whose variables did not change.

@@ -8,9 +8,9 @@ of Sudoku:
   * ... each 3x3 box
 """
 
-from collections.abc import Collection
+from collections.abc import Sequence
 
-from .core import Kind, Model
+from .core import Kind, Model, Step
 
 SIZE = 9
 BOX = 3
@@ -99,8 +99,9 @@ def compile_puzzle(text: str) -> tuple[Model, Grid]:
     return model, grid
 
 
-def render(model: Model, title: str, highlight: Collection[str] = frozenset()) -> str:
-    """Draw the grid, colouring the cells named in `highlight`."""
+def render(model: Model, title: str, steps: Sequence[Step] = ()) -> str:
+    """Draw the grid, colouring the cells placed by `steps`."""
+    placed = {s.var for s in steps if s.asserted}
     rule = "  +------+------+------+"
     out = [f"\n{title}", rule]
     for r in range(SIZE):
@@ -114,7 +115,7 @@ def render(model: Model, title: str, highlight: Collection[str] = frozenset()) -
             digit = model.chosen(name)
             if digit is None:
                 line += ". "
-            elif name in highlight:
+            elif name in placed:
                 line += f"{BLUE}{digit}{RESET} "
             else:
                 line += f"{digit} "

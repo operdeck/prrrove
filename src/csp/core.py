@@ -273,9 +273,10 @@ class Model:
 
 
 # --- rules ----------------------------------------------------------------
-# A rule inspects the model, makes at most one deduction, and returns whether
-# it changed anything. Every rule must be sound for any model, and must log
-# its deductions under its own `Rule.name`.
+# A rule inspects the model, makes one deduction (which may rule out several
+# literals at once), and returns whether it changed anything. Every rule must
+# be sound for any model, and must log its deductions under its own
+# `Rule.name`.
 
 
 class Rule(NamedTuple):
@@ -301,16 +302,27 @@ def rule_single(model: Model) -> bool:
 
 
 def rule_relations(model: Model) -> bool:
-    """Generalised arc consistency: drop a value that no combination of the
-    other variables' values can satisfy."""
+    """Generalised arc consistency: drop every value that no combination of the
+    other variables' values can satisfy, one relation at a time.
+
+    All unsupported values of a relation go together. That is sound: support
+    is checked against the options before any are removed, and removing
+    options never creates support.
+    """
     for relation in model.relations:
         domains = [model.options(var) for var in relation.variables]
-        for position, candidates in enumerate(domains):
-            others = domains[:position] + domains[position + 1 :]
-            for lit in candidates:
-                if not _supported(model, relation, position, lit, others):
-                    model.eliminate(lit, "relations", f"nothing satisfies {relation.name}")
-                    return True
+        unsupported = [
+            lit
+            for position, candidates in enumerate(domains)
+            for lit in candidates
+            if not _supported(
+                model, relation, position, lit, domains[:position] + domains[position + 1 :]
+            )
+        ]
+        for lit in unsupported:
+            model.eliminate(lit, "relations", f"nothing satisfies {relation.name}")
+        if unsupported:
+            return True
     return False
 
 
