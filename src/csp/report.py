@@ -8,7 +8,7 @@ import inspect
 import re
 import textwrap
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from itertools import product
 from math import prod
 
@@ -31,6 +31,24 @@ def describe(model: Model, rules: Sequence[Rule] = DEFAULT_RULES) -> str:
         _algorithm(rules),
     )
     return "\n\n".join(s for s in sections if s)
+
+
+def grade(fired: Iterable[str], rules: Sequence[Rule] = DEFAULT_RULES) -> str:
+    """The hardest rule a solve used, as the puzzle's grade.
+
+    Cheaper rules are always tried first, so the hardest rule only fired
+    when everything below it had stalled: this solver could not do without it.
+    """
+    order = [rule.name for rule in rules]
+    used = {name for name in fired if name in order}
+    return max(used, key=order.index) if used else "none"
+
+
+def rules_used(fired: Iterable[str], rules: Sequence[Rule] = DEFAULT_RULES) -> str:
+    """'rules used: single 51, cover2 2; grade: cover2', ladder order."""
+    counts = Counter(fired)
+    listed = ", ".join(f"{r.name} {counts[r.name]}" for r in rules if counts[r.name])
+    return f"rules used: {listed or 'none'}; grade: {grade(counts, rules)}"
 
 
 # --- sections -------------------------------------------------------------

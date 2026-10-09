@@ -775,6 +775,29 @@ def test_report_leaves_the_model_untouched():
     )
 
 
+def test_grade_is_the_hardest_rung_used():
+    assert report.grade(["single", "cover2", "relations", "single"]) == "cover2"
+    assert report.grade([]) == "none"
+    assert report.rules_used(["single", "cover2", "single"]) == (
+        "rules used: single 2, cover2 1; grade: cover2"
+    )
+
+
+@pytest.mark.parametrize(
+    "name, grade",
+    [
+        ("sudoku_easy.txt", "single"),
+        ("sudoku_pointing.txt", "subsumption"),
+        ("sudoku_swordfish.txt", "cover3"),
+        ("sudoku_chains.txt", "chains"),
+        ("prrrdoku3.txt", "what_if"),
+    ],
+)
+def test_cli_grade_prints_only_the_grade(name, grade, capsys):
+    assert cli.main([str(EXAMPLES / name), "--grade"]) == 0
+    assert capsys.readouterr().out == f"{grade}\n"
+
+
 def test_show_model_explains_and_does_not_solve(capsys):
     assert cli.main([str(EXAMPLES / "sudoku_easy.txt"), "--show-model"]) == 0
     out = capsys.readouterr().out

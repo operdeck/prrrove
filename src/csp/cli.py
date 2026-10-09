@@ -136,11 +136,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Murdoku only: write out a short worked solution, as for a puzzle booklet",
     )
+    instead.add_argument(
+        "--grade",
+        action="store_true",
+        help="print only the puzzle's grade: the hardest rule the solve needed",
+    )
     parser.add_argument(
         "--png",
         type=Path,
         metavar="FILE",
-        help="Murdoku only: write the board as a picture to FILE, and once solved the "
+        help="write the puzzle as a picture to FILE, and once solved the "
         "solution to FILE with '-solution' before the extension (needs Pillow)",
     )
     args = parser.parse_args(argv)
@@ -158,6 +163,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     model = puzzle.model
+    if args.grade:
+        fired: list[str] = []
+        result = Solver(model).solve(on_step=lambda rule, steps: fired.append(rule))
+        print(report.grade(fired) if result.solved else "unsolved")
+        return 0 if result.solved else 1
     print(
         f"{kind}: {model.num_literals} literals, {len(model.constraints)} constraints, "
         f"{len(model.relations)} relations"
@@ -180,7 +190,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"\n{story.explain(text)}")
         return 0
 
+    used: list[str] = []
+
     def on_step(rule: str, steps: Sequence[Step]) -> None:
+        used.append(rule)
         if not (args.verbose or args.step):
             return
         narrate(rule, steps)
@@ -208,6 +221,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"needs a rule beyond {'/'.join(rule.name for rule in DEFAULT_RULES)}.")
 
     print(f"\n{result.iterations} iterations, {len(model.log)} deductions logged")
+    print(report.rules_used(used))
     return 0 if result.solved else 1
 
 
