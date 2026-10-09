@@ -66,6 +66,13 @@ def test_picture_shows_regions_objects_and_borders():
     assert sum(pixel_on_line(5 * CELL, CELL // 2)) < 100
 
 
+def test_without_legend_the_picture_is_square():
+    board, _ = load_board((EXAMPLES / "prrrdoku3.txt").read_text())
+    with_legend = picture.murdoku_picture(board, cell=CELL)
+    without = picture.murdoku_picture(board, cell=CELL, legend=False)
+    assert without.width == without.height == with_legend.width < with_legend.height
+
+
 def test_hatching_only_on_hatched_regions():
     board, _ = load_board((EXAMPLES / "prrrdoku3.txt").read_text())
     image = picture.murdoku_picture(board, cell=CELL)

@@ -32,12 +32,17 @@ def murdoku_picture(
     *,
     cell: int = 120,
     coordinates: bool = True,
+    legend: bool = True,
 ) -> Image.Image:
-    """The board, with `placed` people drawn on their squares if given."""
+    """The board, with `placed` people drawn on their squares if given.
+
+    Without `legend` the picture is square, for documents with their own legend.
+    """
     margin = cell // 2 if coordinates else cell // 6
     side = board.size * cell
-    legend = _Legend(board, cell)
-    image = Image.new("RGB", (side + 2 * margin, side + 2 * margin + legend.height), WHITE)
+    key = _Legend(board, cell) if legend else None
+    height = side + 2 * margin + (key.height if key else 0)
+    image = Image.new("RGB", (side + 2 * margin, height), WHITE)
     draw = ImageDraw.Draw(image)
     fills = _fills(board)
 
@@ -63,15 +68,18 @@ def murdoku_picture(
             x0, y0, _, _ = box(min(piece))
             _, _, x1, y1 = box(max(piece))
             if occupied & set(piece):
-                y1 = y0 + int(cell * 0.6)  # leave room for the name tag below
-            _icon(image, draw, name, (x0, y0, x1, y1), cell)
+                y1 = y0 + int(cell * 0.62)  # leave room for the name tag below
+                _icon(image, draw, name, (x0, y0, x1, y1), cell, scale=0.95)
+            else:
+                _icon(image, draw, name, (x0, y0, x1, y1), cell)
     furnished = board.squares_of(board.furniture)
     for person, sq in (placed or {}).items():
         _name_tag(draw, person, box(sq), cell, low=sq in furnished)
 
     if coordinates:
         _coordinates(draw, board.size, margin, cell)
-    legend.draw(image, draw, margin, margin + side + cell // 3)
+    if key:
+        key.draw(image, draw, margin, margin + side + cell // 3)
     return image
 
 
@@ -177,13 +185,20 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return ImageFont.load_default(size=size)
 
 
-def _icon(image: Image.Image, draw: ImageDraw.ImageDraw, name: str, area: Box, cell: int) -> None:
+def _icon(
+    image: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    name: str,
+    area: Box,
+    cell: int,
+    scale: float = 0.72,
+) -> None:
     x0, y0, x1, y1 = area
     path = icons.icon(name)
     if path is None:
         _centred_text(draw, name[:6], area, cell // 5, INK)
         return
-    size = int(min(x1 - x0, y1 - y0) * 0.72)
+    size = int(min(x1 - x0, y1 - y0) * scale)
     picture = Image.open(path).convert("RGBA")
     picture.thumbnail((size, size), Image.Resampling.LANCZOS)
     left = x0 + (x1 - x0 - picture.width) // 2
