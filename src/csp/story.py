@@ -69,6 +69,11 @@ PHRASES: dict[str, dict[str, str]] = {
         "filled_only_one": "{lines} can only be filled {where}",
         "filled_only_many": "{lines} can only be filled {where}",
         "via": "via {refs}",
+        "chain_if": "If {who} is not on {square}",
+        "chain_on": "then {who} is on {square}",
+        "chain_off": "then {who} is not on {square}",
+        "chain_so": "So {ends}; either way {outcome}.",
+        "chain_either": "{ends}; either way {outcome}.",
         "nobody_else": "nobody else can be there",
         "then_on": "then {who} is on {square}",
         "nowhere": "then {who} has nowhere left",
@@ -133,6 +138,11 @@ PHRASES: dict[str, dict[str, str]] = {
         "filled_only_one": "{lines} kan alleen nog gevuld worden {where}",
         "filled_only_many": "{lines} kunnen alleen nog gevuld worden {where}",
         "via": "via {refs}",
+        "chain_if": "Als {who} niet op {square} zit",
+        "chain_on": "dan zit {who} op {square}",
+        "chain_off": "dan zit {who} niet op {square}",
+        "chain_so": "Dus {ends}; hoe dan ook {outcome}.",
+        "chain_either": "{ends}; hoe dan ook {outcome}.",
         "nobody_else": "daar kan verder niemand",
         "then_on": "dan zit {who} op {square}",
         "nowhere": "dan kan {who} nergens meer",
@@ -482,7 +492,51 @@ class Story:
         if rule == "relations":
             outcome = self._outcome(changed, before, state)
             return self._relation(steps[0], before, changed, outcome)
+        if rule == "chains":
+            return self._chain(steps[0], changed, before, state)
         return self._cover(steps[0], changed, before, state)
+
+    def _chain(
+        self, step: Step, changed: list[str], before: dict[str, set[Square]], state: _State
+    ) -> str:
+        """'If A is not on a, then B is on b, then ... so A on a or Z on z; either way ...'"""
+        square = self.places.square
+        (who, at), *rest = step.chain
+        parts = [self.say("chain_if", who=who, square=square(at))]
+        for i, (who, at) in enumerate(rest):
+            key = "chain_on" if i % 2 == 0 else "chain_off"
+            why = self._link_reason(step.sources[i]) if i < len(step.sources) else ""
+            parts.append(self.say(key, who=who, square=square(at)) + why)
+        (first, a), (last, z) = step.chain[0], step.chain[-1]
+        ends = self.say.join(
+            [
+                self.say("is", who=first, where=self.say("on", what=square(a))),
+                self.say("is", who=last, where=self.say("on", what=square(z))),
+            ],
+            "or",
+        )
+        outcome = []
+        for p in changed:
+            gone = self.places.squares(before[p] - state.options[p])
+            outcome.append(self.say("is_not", who=p, where=self.say("on", what=gone)))
+            state.told[p] -= before[p] - state.options[p]
+            if len(state.options[p]) == 1 and p not in state.announced:
+                state.announce(p)
+                outcome.append(self.places.placed(p, min(state.options[p])))
+        so = self.say("chain_so", ends=ends, outcome=self.say.join(outcome))
+        if len(step.chain) == 2:
+            return _cap(self.say("chain_either", ends=ends, outcome=self.say.join(outcome)))
+        return f"{', '.join(parts)}. {so}"
+
+    def _link_reason(self, source: str) -> str:
+        """' (row 8)' or ' (7)' after a chain link; nothing when it is one person
+        or one square, which the sentence already makes plain."""
+        if source in self.conditions:
+            return self._ref(self.conditions[source])
+        kind, what = self.about.get(source, ("", None))
+        if kind in ("row", "col"):
+            return f" ({self.places.line(kind, what)})"
+        return ""
 
     def _outcome(self, people: Sequence[str], before: dict[str, set[Square]], state: _State) -> str:
         """Where `people` can be now, out of where they could be `before`."""

@@ -34,6 +34,7 @@ from .core import (
     Step,
     StepCallback,
     cover,
+    follow_chain,
     prune_relation,
     refute,
     rule_single,
@@ -41,7 +42,7 @@ from .core import (
 
 type Key = tuple[int, int]  # (0, i): main log step i; (1, j): step j of a trail
 
-HARDEST_FIRST = ("what_if", "cover3", "cover2", "relations", "subsumption")
+HARDEST_FIRST = ("what_if", "chains", "cover3", "cover2", "relations", "subsumption")
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,7 @@ class Move:
     sources: tuple[str, ...]
     scope: tuple[str, ...] = ()
     target: tuple[str, Any] | None = None  # what_if: the value refuted
+    chain: tuple[tuple[str, Any], ...] = ()
 
     @classmethod
     def of(cls, rule: str, steps: Sequence[Step]) -> "Move | None":
@@ -60,11 +62,13 @@ class Move:
             return None
         first = steps[0]
         target = (first.var, first.value) if rule == "what_if" else None
-        return cls(rule, first.sources, first.scope, target)
+        return cls(rule, first.sources, first.scope, target, first.chain)
 
     def apply(self, model: Model) -> bool:
         if self.target is not None:
             return refute(model, model.literal(*self.target))
+        if self.chain:
+            return follow_chain(model, [model.literal(*pair) for pair in self.chain])
         if self.scope:
             index = {c.name: c.index for c in model.constraints}
             return cover(model, [index[n] for n in self.sources], [index[n] for n in self.scope])

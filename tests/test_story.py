@@ -150,6 +150,15 @@ def test_counting_clue_is_worded_and_known_placements_are_not_bold_again():
     assert "Ben is on r3c4, so Ada is not in the study" in story
 
 
+def test_chains_are_told_as_if_then_with_the_reason_for_each_link():
+    story = explain((EXAMPLES / "prrrdoku2.txt").read_text())
+    assert (
+        "Als Otto niet op r6k5 zit, dan zit Otto op r7k6, dan zit Luna niet op r7k4 (rij 7), "
+        "dan zit Luna op r8k3. Dus Otto zit op r6k5 of Luna zit op r8k3; hoe dan ook"
+    ) in story
+    assert "Tjitske zit op r5k2 of Tjitske zit op r6k1; hoe dan ook" in story
+
+
 def test_story_cites_clue_numbers():
     story = explain((EXAMPLES / "prrrdoku1.txt").read_text())
     assert "Otto is precies één rij boven Tjitske (5)" in story
