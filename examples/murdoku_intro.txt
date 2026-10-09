@@ -1,4 +1,4 @@
-# Murdoku 0 - "De eerste zaak"  (4x4, three regions)
+# Murdoku 0 - "The first case"  (4x4, three regions)
 #
 # A first, tiny Murdoku to show how the puzzle works. The layout follows the
 # opening example of a Murdoku book; people and rooms are renamed.
@@ -9,34 +9,34 @@
 # did it.
 #
 # Solution: Joost r1c1, Wouter r2c3, Ingrid r3c4, Lotte r4c2, so Ingrid is
-# the murderer (she is the only other person in the zitkamer).
+# the murderer (she is the only other person in the sitting room).
 
 Size: 4
-Language: nl
+Language: en
 
 Words:
-bed: het bed
+patio: on the patio
 
 Regions:
 p: patio #CBE6B9
-g: gastenkamer #F4CBC3
-z: zitkamer #FADFB5
+g: guest_room #F4CBC3
+s: sitting_room #FADFB5
 
 Grid:
 p p p p
-p g z z
-g g z z
-g g z z
+p g s s
+g g s s
+g g s s
 
 Objects:
-boom: r1c2
-struik: r1c3
-tafel: r2c4
-kast: r4c4
+tree: r1c2
+bush: r1c3
+table: r2c4
+cabinet: r4c4
 
 # Chairs and the bed can be sat or lain on; the bed is 1x2.
 Furniture:
-stoel: r3c1 r3c4 r4c3
+chair: r3c1 r3c4 r4c3
 bed: r4c1 r4c2
 
 People:
@@ -46,6 +46,6 @@ Lotte
 Wouter
 
 Clues:
-on Ingrid stoel
-next_to Joost boom
+on Ingrid chair
+next_to Joost tree
 on Lotte bed

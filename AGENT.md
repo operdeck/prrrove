@@ -131,6 +131,7 @@ Numbers from actual runs, not estimates:
 | `sudoku_xwing.txt` | solved, 57 iterations | `single` 54, `cover2` 2 |
 | `sudoku_swordfish.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `cover3` 1 |
 | `sudoku_what_if.txt` | solved, 66 iterations | `single` 55, `subsumption` 6, `cover2` 2, `what_if` 2 |
+| `murdoku_intro.txt` | solved, 5 iterations | `single` 4 |
 | `prrrdoku1.txt` | solved, 14 iterations | `single` 7, `relations` 5, `subsumption` 1 |
 | `prrrdoku2.txt` | solved, 22 iterations | `relations` 9, `single` 9, `cover3` 1, `cover2` 1, `what_if` 1 |
 | `prrrdoku3.txt` | solved, 41 iterations | `relations` 15, `single` 9, `what_if` 9, `subsumption` 7 |
