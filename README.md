@@ -14,6 +14,7 @@ Requires Python 3.12+; no runtime dependencies.
 ./solve.sh examples/prrrdoku1.txt --step      # redraw and pause each deduction
 ./solve.sh examples/calcudoku_6x6_hard.txt --step
 ./solve.sh examples/prrrdoku1.txt --show-model  # explain the compiled model, don't solve
+./solve.sh examples/prrrdoku2.txt --brute-force # check uniqueness by plain search
 ```
 
 `--show-model` is the quickest way into the design: it prints what the
@@ -92,7 +93,7 @@ Not implemented: chains. See `AGENT.md`.
 ## Verification
 
 ```bash
-uv run --with pytest pytest -q          # 51 tests
+uv run --with pytest pytest -q          # 104 tests
 uvx ruff check src tests                # lint
 uvx ruff format --check src tests       # formatting
 uvx mypy src                            # strict type check
@@ -100,13 +101,18 @@ uvx mypy src                            # strict type check
 
 Correctness is checked against ground truth, not self-consistency:
 
-- Sudoku's solution is re-validated independently — every row, column and box
-  is a permutation of 1-9, and every given survives.
+- **Brute force.** `csp.bruteforce` solves every puzzle family by plain
+  backtracking, with no literals, constraints or deduction rules. It shares
+  only the file readers and the puzzle's rule definitions (Calcudoku cage
+  arithmetic, Murdoku clue `conditions`) with the engine, and a test checks
+  it never imports `csp.core`. Every example must have exactly one
+  brute-force solution, and the engine must find that same solution.
+  `--brute-force` runs it from the command line; exit code 0 means the
+  puzzle is unique, so it is the check to run after transcribing a puzzle.
 - The graded Sudokus (`sudoku_pointing`, `_naked_pair`, `_hidden_pair`,
-  `_xwing`, `_swordfish`, `_what_if`) are compared cell by cell against a
-  plain backtracking search that shares no code with the engine. Each must
-  also show its named pattern in the log, and must stall when the ladder is
-  cut just before its rule, so the example really exercises that rung.
+  `_xwing`, `_swordfish`, `_what_if`) and Calcudokus must also show their
+  named pattern in the log, and must stall when the ladder is cut just
+  before their rule, so each example really exercises that rung.
 - All three Prrrdokus are checked against the published solutions and the
   puzzle's question (who is in Vladimir's region) in `Prrrdoku 3.docx`, and the
   post-clue candidate lists are compared against the lists quoted in that
@@ -175,9 +181,10 @@ src/csp/
   sudoku.py      Sudoku compiler + renderer
   calcudoku.py   Calcudoku/KenKen compiler + renderer with pencil marks
   murdoku.py     Murdoku compiler + renderer + clue vocabulary
-  puzzlefile.py  reader for the sectioned Murdoku format
+  puzzlefile.py  file readers: section format, Murdoku boards, kind detection
   report.py      --show-model: a plain-text account of any compiled model
   cli.py         command line
+  bruteforce/    --brute-force: plain search per puzzle family, no engine
 examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
                  need), prrrdoku1-3.txt
 tests/           test_solver.py

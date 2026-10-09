@@ -52,6 +52,7 @@ inspection methods, `assign`/`eliminate`). Renderers learn what changed from
 | progress | `on_step(rule_name, steps)` after each rule that fires |
 | CLI -> puzzle | `cli.load(text, kind) -> Puzzle(kind, model, draw)` |
 | explanation | `report.describe(model, rules) -> str`, public `Model` API only |
+| brute force | `bruteforce.solutions(text, kind, limit) -> list[dict]`; never imports `core` |
 
 Label every constraint with `family=` when compiling a new puzzle type;
 `--show-model` groups by it and falls back to the name with digits masked.
@@ -96,11 +97,14 @@ than listing it as working.
 4. A `render(..., title, steps) -> str` function. `steps` are the deductions
    just made; show what they changed, including eliminations a person would
    mark on paper (Murdoku crosses out squares nobody can reach).
-   of variable names.
-5. Wire into `cli.detect` and `cli.load`.
-6. Test against an **independent** source of truth — a published solution, or
-   a property check (permutation, givens preserved). Self-consistency is not
-   verification.
+5. Wire into `puzzlefile.detect` and `cli.load`.
+6. Add `bruteforce/<family>.py` with `solutions(text, limit) -> list[dict]`,
+   a plain search sharing only the reader and the rule definitions. Keep the
+   rule definitions (what a clue or cage *means*) in one place that both the
+   compiler and the brute force call, as `murdoku.conditions` does.
+7. Test against an **independent** source of truth — a published solution,
+   the brute force, or a property check (permutation, givens preserved).
+   Self-consistency is not verification.
 
 ## Current rule coverage, measured
 
@@ -126,8 +130,8 @@ Numbers from actual runs, not estimates:
 
 The Calcudokus were generated the same way as the graded Sudokus (random
 Latin square, random cages, uniqueness checked by brute force) because
-newspaper puzzles are copyrighted. A test re-checks each against its own
-brute-force solver. Most random 6x6 Calcudokus need only `relations`; about
+newspaper puzzles are copyrighted. `test_every_example_is_unique_and_the_engine_finds_it`
+re-checks every example with `csp.bruteforce`. Most random 6x6 Calcudokus need only `relations`; about
 one in ten needs `cover2`, and fewer need `what_if`.
 
 The graded Sudokus were generated (random minimal puzzles, uniqueness checked

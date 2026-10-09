@@ -354,6 +354,7 @@ def render(board: Board, model: Model, title: str, steps: Sequence[Step] = ()) -
         square = model.chosen(person)
         if square is not None:
             at[square] = person
+    finished = len(at) == len(board.people)  # crosses are a working aid; drop them at the end
 
     out = [f"\n{BOLD}{title}{RESET}"]
     out.append("   " + "".join(f"{c + 1:^4}" for c in range(board.size)))
@@ -368,7 +369,7 @@ def render(board: Board, model: Model, title: str, steps: Sequence[Step] = ()) -
                 person = at[sq]
                 tint = NEW if person in placed else INK
                 body = f"{tint}{person[:3]:^4}"
-            elif sq not in reachable:
+            elif sq not in reachable and not finished:
                 tint = f"{BOLD}{NEW}" if sq in eliminated else FADED
                 body = f"{tint} x  "
             elif sq in furnished:
@@ -378,9 +379,10 @@ def render(board: Board, model: Model, title: str, steps: Sequence[Step] = ()) -
             line += colour + body + RESET
         out.append(line)
 
-    open_count = len(reachable - set(at))
-    empty_count = len(board.free) - len(at)
-    out.append(f"\n  {open_count} of {empty_count} empty squares still possible for someone")
+    if not finished:
+        open_count = len(reachable - set(at))
+        empty_count = len(board.free) - len(at)
+        out.append(f"\n  {open_count} of {empty_count} empty squares still possible for someone")
     out += _narrowed(board, model, steps)
 
     out.append("")

@@ -213,7 +213,7 @@ def _cage_test(cage: Cage) -> Callable[..., bool]:
 # --- rendering ------------------------------------------------------------
 
 
-def render(model: Model, puzzle: Puzzle, title: str, steps: Sequence[Step] = ()) -> str:
+def render(puzzle: Puzzle, model: Model, title: str, steps: Sequence[Step] = ()) -> str:
     """Draw the grid with cage walls, cage labels, and pencil marks.
 
     Open cells list the numbers still possible, as a person pencils them in.

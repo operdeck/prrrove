@@ -9,6 +9,15 @@ import re
 
 from .murdoku import Board, Clue, Square
 
+KINDS = ("sudoku", "murdoku", "calcudoku")
+
+
+def detect(text: str) -> str:
+    """Which puzzle family a file holds, from its sections."""
+    if "Cages:" in text:
+        return "calcudoku"
+    return "murdoku" if "Regions:" in text else "sudoku"
+
 
 def read_sections(text: str) -> dict[str, list[str]]:
     """Section name -> its non-blank, non-comment lines."""

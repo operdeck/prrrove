@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from csp import calcudoku, cli, murdoku, report, sudoku
+from csp import bruteforce, calcudoku, cli, murdoku, report, sudoku
 from csp.core import (
     DEFAULT_RULES,
     Contradiction,
@@ -180,36 +180,6 @@ def test_sudoku_solves_to_a_valid_grid():
     assert all(grid[r][c] in (0, rows[r][c]) for r in range(9) for c in range(9))
 
 
-def _backtrack(grid):
-    """Plain search, sharing no code with the engine: the independent answer."""
-    g = [row[:] for row in grid]
-
-    def fits(r, c, d):
-        br, bc = r - r % 3, c - c % 3
-        return (
-            d not in g[r]
-            and all(g[i][c] != d for i in range(9))
-            and all(g[br + i][bc + j] != d for i in range(3) for j in range(3))
-        )
-
-    def go(i):
-        if i == 81:
-            return True
-        r, c = divmod(i, 9)
-        if g[r][c]:
-            return go(i + 1)
-        for d in range(1, 10):
-            if fits(r, c, d):
-                g[r][c] = d
-                if go(i + 1):
-                    return True
-        g[r][c] = 0
-        return False
-
-    assert go(0)
-    return g
-
-
 def _before(rule: str) -> tuple[Rule, ...]:
     names = [r.name for r in DEFAULT_RULES]
     return DEFAULT_RULES[: names.index(rule)]
@@ -231,16 +201,9 @@ GRADED = [
 
 
 @pytest.mark.parametrize("name, rule, pattern", GRADED)
-def test_graded_sudoku_matches_independent_solution(name, rule, pattern):
-    model, grid = sudoku.compile_puzzle((EXAMPLES / name).read_text())
-    result = Solver(model).solve()
-    assert result.solved
-    expected = _backtrack(grid)
-    assert all(
-        result.assignment[sudoku.cell_name(r, c)] == expected[r][c]
-        for r in range(9)
-        for c in range(9)
-    )
+def test_graded_sudoku_shows_its_pattern(name, rule, pattern):
+    model, _ = sudoku.compile_puzzle((EXAMPLES / name).read_text())
+    assert Solver(model).solve().solved
     assert any(s.rule == rule and re.search(pattern, s.reason) for s in model.log)
 
 
@@ -541,64 +504,6 @@ def test_numeric_region_ids_still_read():
 # --- calcudoku -----------------------------------------------------------
 
 
-def _brute_force_calcudoku(text: str) -> list[dict[str, int]]:
-    """Every solution, by plain search with its own arithmetic: shares no code
-    with the engine beyond reading the file."""
-    puzzle = calcudoku.parse(text)
-    n = puzzle.size
-    cage_of = {cell: cage for cage in puzzle.cages for cell in cage.cells}
-
-    def makes(op, target, vals):
-        if op is None:
-            return vals == [target]
-        if op == "+":
-            return sum(vals) == target
-        if op == "x":
-            result = 1
-            for v in vals:
-                result *= v
-            return result == target
-        a, b = sorted(vals)
-        return b - a == target if op == "-" else b == a * target
-
-    grid: dict[tuple[int, int], int] = {}
-    found: list[dict[str, int]] = []
-
-    def go(i: int) -> None:
-        if i == n * n:
-            found.append({calcudoku.cell_name(c): v for c, v in grid.items()})
-            return
-        r, c = divmod(i, n)
-        for v in range(1, n + 1):
-            if any(grid.get((r, j)) == v for j in range(c)) or any(
-                grid.get((k, c)) == v for k in range(r)
-            ):
-                continue
-            grid[(r, c)] = v
-            cage = cage_of[(r, c)]
-            vals = [grid[cell] for cell in cage.cells if cell in grid]
-            if len(vals) == len(cage.cells):
-                ok = makes(cage.operator, cage.target, vals)
-            elif cage.operator == "+":
-                ok = sum(vals) < cage.target
-            elif cage.operator == "x":
-                ok = cage.target % makes_product(vals) == 0
-            else:
-                ok = True
-            if ok:
-                go(i + 1)
-            del grid[(r, c)]
-
-    def makes_product(vals):
-        result = 1
-        for v in vals:
-            result *= v
-        return result
-
-    go(0)
-    return found
-
-
 # file, the rule it needs
 CALCUDOKUS = [
     ("calcudoku_4x4_easy.txt", "relations"),
@@ -607,16 +512,6 @@ CALCUDOKUS = [
     ("calcudoku_6x6_fiendish.txt", "what_if"),
     ("calcudoku_7x7_hard.txt", "cover3"),
 ]
-
-
-@pytest.mark.parametrize("name, rule", CALCUDOKUS)
-def test_calcudoku_matches_the_unique_brute_force_solution(name, rule):
-    text = (EXAMPLES / name).read_text()
-    (expected,) = _brute_force_calcudoku(text)
-    model, _ = calcudoku.compile_puzzle(text)
-    result = Solver(model).solve()
-    assert result.solved
-    assert result.assignment == expected
 
 
 @pytest.mark.parametrize("name, rule", CALCUDOKUS)
@@ -669,6 +564,66 @@ def test_cli_detects_calcudoku():
     text = (EXAMPLES / "calcudoku_4x4_easy.txt").read_text()
     assert cli.detect(text) == "calcudoku"
     assert cli.main([str(EXAMPLES / "calcudoku_4x4_easy.txt")]) == 0
+
+
+# --- brute force ----------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in EXAMPLES.glob("*.txt")))
+def test_every_example_is_unique_and_the_engine_finds_it(name):
+    text = (EXAMPLES / name).read_text()
+    (expected,) = bruteforce.solutions(text)
+    result = Solver(cli.load(text, cli.detect(text)).model).solve()
+    assert result.solved
+    assert result.assignment == expected
+
+
+def test_bruteforce_never_touches_the_engine():
+    """Its whole point is independence: no import from csp.core, directly."""
+    import ast
+
+    package = Path(bruteforce.__file__).parent
+    for source in package.glob("*.py"):
+        tree = ast.parse(source.read_text())
+        imported = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module is not None
+        }
+        imported |= {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        assert not {m for m in imported if m.endswith("core")}, source.name
+
+
+@pytest.mark.parametrize(
+    "kind, text, count",
+    [
+        ("calcudoku", "Size: 2\nGrid:\na a\nb b\nCages:\na: 3+\nb: 3+\n", 2),
+        ("calcudoku", "Size: 2\nGrid:\na a\nb b\nCages:\na: 4+\nb: 3+\n", 0),
+        ("murdoku", "Size: 2\nRegions:\na: here\nGrid:\na a\na a\nPeople:\nA\nB\n", 4),
+        ("sudoku", "\n".join(["5 5 . . . . . . ."] + [". " * 9] * 8), 0),
+    ],
+)
+def test_bruteforce_reports_non_unique_and_impossible_puzzles(kind, text, count):
+    assert len(bruteforce.solutions(text, kind, limit=5)) == count
+
+
+def test_bruteforce_sudoku_stops_at_the_limit():
+    empty = "\n".join([". " * 9] * 9)
+    assert len(bruteforce.solutions(empty, "sudoku", limit=3)) == 3
+
+
+def test_cli_brute_force_exit_codes(tmp_path, capsys):
+    assert cli.main([str(EXAMPLES / "prrrdoku2.txt"), "--brute-force"]) == 0
+    assert "unique solution" in capsys.readouterr().out
+    two = tmp_path / "two.txt"
+    two.write_text("Size: 2\nGrid:\na a\nb b\nCages:\na: 3+\nb: 3+\n")
+    assert cli.main([str(two), "--brute-force"]) == 1
+    assert "more than one solution" in capsys.readouterr().out
 
 
 # --- model report ---------------------------------------------------------
