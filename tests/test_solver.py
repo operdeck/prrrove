@@ -638,6 +638,18 @@ def test_every_example_is_unique_and_the_engine_finds_it(name):
     assert result.assignment == expected
 
 
+@pytest.mark.parametrize("name", sorted(p.name for p in EXAMPLES.glob("*.txt")))
+def test_no_step_ever_contradicts_the_brute_force_solution(name):
+    """Every placement is right and every elimination removes a wrong value,
+    compile time included: the soundness contract, checked step by step."""
+    text = (EXAMPLES / name).read_text()
+    (expected,) = bruteforce.solutions(text)
+    model = cli.load(text, cli.detect(text)).model
+    Solver(model).solve()
+    for step in model.log:
+        assert (step.value == expected[step.var]) == step.asserted, step
+
+
 def test_bruteforce_never_touches_the_engine():
     """Its whole point is independence: no import from csp.core, directly."""
     import ast
