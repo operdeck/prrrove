@@ -88,21 +88,12 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
 
     clues = _clues(section.get("Clues", []))
 
-    words = {}
-    for line in section.get("Words", []):
-        name, _, phrase = line.partition(":")
-        if not phrase.strip():
-            raise ValueError(f"Words: {line!r} is not like 'vuurtje: het vuurtje'")
-        words[name.strip()] = phrase.strip()
-
     board = Board(size, grid, region_names, objects, people, groups, furniture, colours)
     board.region_ids(groups)  # fails now, not mid-solve, if a group names an unknown region
     board.hatched = board.region_ids(
         name for line in section.get("Hatched", []) for name in line.split()
     )
     board.rules = _clues(section.get("Rules", []))
-    board.language = section.get("Language", ["en"])[0]
-    board.words = words
     return board, clues
 
 

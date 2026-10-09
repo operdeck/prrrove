@@ -19,8 +19,9 @@ Otto", "Luna is furthest from Mao").
 from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
-from .core import Kind, LiteralId, Model, Step
+from .core import Kind, Model, Step
 
 RESET = "\033[0m"
 BOLD = "\033[1m"
@@ -67,8 +68,7 @@ class Board:
     `hatched` (region ids) only affect pictures.
 
     `rules` are clues that come with the board rather than the puzzle, such
-    as "only Luna can be in the water"; they are not numbered. `language`
-    and `words` (name -> how to say it) only affect written explanations.
+    as "only Luna can be in the water"; they are not numbered.
     """
 
     size: int
@@ -81,8 +81,6 @@ class Board:
     colours: dict[str, str] = field(default_factory=dict)
     hatched: set[str] = field(default_factory=set)
     rules: list["Clue"] = field(default_factory=list)
-    language: str = "en"
-    words: dict[str, str] = field(default_factory=dict)
     free: list[Square] = field(init=False)
     borders: set[frozenset[str]] = field(init=False)
 
@@ -325,40 +323,73 @@ def compile_puzzle(board: Board, clues: Iterable[Clue]) -> Model:
     return model
 
 
-def _add_board_rules(model: Model, board: Board) -> None:
-    for person in board.people:
-        model.constrain(
-            f"{person} stands somewhere",
+@dataclass(frozen=True)
+class BoardRule:
+    """One constraint every Murdoku has, and what it is `about`:
+    ('person', name), ('square', Square), ('row', i) or ('col', i), 0-based.
+
+    `compile_puzzle` builds the model from these, so a reader can look a
+    constraint's meaning up by name instead of parsing the name.
+    """
+
+    name: str
+    kind: Kind
+    family: str
+    about: tuple[str, Any]
+    options: tuple[tuple[str, Square], ...]  # (person, square) pairs
+
+
+def board_rules(board: Board) -> list[BoardRule]:
+    people, free = board.people, board.free
+    rules = [
+        BoardRule(
+            f"{p} stands somewhere",
             Kind.EXACTLY_ONE,
-            [model.literal(person, sq) for sq in board.free],
-            defines=person,
-            family="each person stands on one square",
+            "each person stands on one square",
+            ("person", p),
+            tuple((p, sq) for sq in free),
         )
-    for sq in board.free:
-        model.constrain(
+        for p in people
+    ]
+    rules += [
+        BoardRule(
             f"{sq} holds at most one",
             Kind.AT_MOST_ONE,
-            [model.literal(p, sq) for p in board.people],
-            family="each square holds at most one person",
+            "each square holds at most one person",
+            ("square", sq),
+            tuple((p, sq) for p in people),
         )
-    for i in range(board.size):
-        model.constrain(
-            f"row {i + 1} holds one person",
-            Kind.EXACTLY_ONE,
-            _anyone_on(model, board, [sq for sq in board.free if sq.row == i]),
-            family="each row holds one person",
-        )
-    for i in range(board.size):
-        model.constrain(
-            f"col {i + 1} holds one person",
-            Kind.EXACTLY_ONE,
-            _anyone_on(model, board, [sq for sq in board.free if sq.col == i]),
-            family="each column holds one person",
-        )
+        for sq in free
+    ]
+    for line, word in (("row", "row"), ("col", "column")):
+        rules += [
+            BoardRule(
+                f"{line} {i + 1} holds one person",
+                Kind.EXACTLY_ONE,
+                f"each {word} holds one person",
+                (line, i),
+                tuple(
+                    (p, sq)
+                    for p in people
+                    for sq in free
+                    if (sq.row if line == "row" else sq.col) == i
+                ),
+            )
+            for i in range(board.size)
+        ]
+    return rules
 
 
-def _anyone_on(model: Model, board: Board, squares: list[Square]) -> list[LiteralId]:
-    return [model.literal(p, sq) for p in board.people for sq in squares]
+def _add_board_rules(model: Model, board: Board) -> None:
+    for rule in board_rules(board):
+        person = rule.about[1] if rule.about[0] == "person" else None
+        model.constrain(
+            rule.name,
+            rule.kind,
+            [model.literal(p, sq) for p, sq in rule.options],
+            defines=person,
+            family=rule.family,
+        )
 
 
 # --- rendering ------------------------------------------------------------
