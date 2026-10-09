@@ -37,7 +37,14 @@ class Kind(Enum):
 
 
 class Contradiction(Exception):
-    """The current state cannot be extended to any solution."""
+    """The current state cannot be extended to any solution.
+
+    `source` names the constraint or relation that broke, when known.
+    """
+
+    def __init__(self, message: str, source: str | None = None) -> None:
+        super().__init__(message)
+        self.source = source
 
 
 @dataclass(frozen=True)
@@ -78,13 +85,24 @@ class Relation:
 
 @dataclass(frozen=True)
 class Step:
-    """One logged deduction: `var=value` was asserted or ruled out, and why."""
+    """One logged deduction: `var=value` was asserted or ruled out, and why.
+
+    `reason` says why for people; the other fields say it for programs.
+    `sources` names the constraints or relations the deduction rests on, and
+    `scope` the constraints whose other options it pruned (subsumption,
+    cover). `placing` is the var=value whose placement ruled this one out.
+    `trail` holds what_if's steps from the assumption to the contradiction.
+    """
 
     var: str
     value: Any
     asserted: bool
     rule: str
     reason: str
+    sources: tuple[str, ...] = ()
+    scope: tuple[str, ...] = ()
+    placing: tuple[str, Any] | None = None
+    trail: tuple["Step", ...] = ()
 
     @property
     def literal(self) -> str:
@@ -230,32 +248,63 @@ class Model:
 
     # --- mutation ---------------------------------------------------------
 
-    def eliminate(self, lit: LiteralId, rule: str, reason: str) -> bool:
-        """Rule `lit` out. Returns whether that changed anything."""
+    def eliminate(
+        self,
+        lit: LiteralId,
+        rule: str,
+        reason: str,
+        *,
+        sources: tuple[str, ...] = (),
+        scope: tuple[str, ...] = (),
+        placing: tuple[str, Any] | None = None,
+        trail: tuple[Step, ...] = (),
+    ) -> bool:
+        """Rule `lit` out. Returns whether that changed anything.
+
+        The keywords become the logged `Step`'s fields of the same names.
+        """
         match self._state[lit]:
             case Truth.FALSE:
                 return False
             case Truth.TRUE:
-                raise Contradiction(f"{self.describe(lit)} is already true; {reason}")
+                raise Contradiction(
+                    f"{self.describe(lit)} is already true; {reason}",
+                    sources[0] if sources else None,
+                )
         self._state[lit] = Truth.FALSE
-        self._record(lit, False, rule, reason)
+        literal = self._literals[lit]
+        self.log.append(
+            Step(literal.var, literal.value, False, rule, reason, sources, scope, placing, trail)
+        )
         return True
 
-    def assign(self, lit: LiteralId, rule: str, reason: str) -> bool:
+    def assign(
+        self, lit: LiteralId, rule: str, reason: str, *, sources: tuple[str, ...] = ()
+    ) -> bool:
         """Make `lit` true and rule out every literal it shares a constraint with."""
         match self._state[lit]:
             case Truth.TRUE:
                 return False
             case Truth.FALSE:
-                raise Contradiction(f"{self.describe(lit)} is already ruled out; {reason}")
+                raise Contradiction(
+                    f"{self.describe(lit)} is already ruled out; {reason}",
+                    sources[0] if sources else None,
+                )
         self._state[lit] = Truth.TRUE
-        self._record(lit, True, rule, reason)
+        literal = self._literals[lit]
+        self.log.append(Step(literal.var, literal.value, True, rule, reason, sources))
         # Both kinds cap a constraint at one truth, so siblings go either way.
         for ci in self._in_constraints[lit]:
             constraint = self._constraints[ci]
             for other in constraint.literals:
                 if other != lit and self._state[other] is Truth.UNKNOWN:
-                    self.eliminate(other, rule, f"{self.describe(lit)} holds in {constraint.name}")
+                    self.eliminate(
+                        other,
+                        rule,
+                        f"{literal} holds in {constraint.name}",
+                        sources=(constraint.name,),
+                        placing=(literal.var, literal.value),
+                    )
         return True
 
     def check(self) -> None:
@@ -263,13 +312,11 @@ class Model:
         for constraint in self._constraints:
             states = [self._state[lit] for lit in constraint.literals]
             if states.count(Truth.TRUE) > 1:
-                raise Contradiction(f"{constraint.name}: more than one literal true")
+                raise Contradiction(
+                    f"{constraint.name}: more than one literal true", constraint.name
+                )
             if constraint.kind is Kind.EXACTLY_ONE and all(s is Truth.FALSE for s in states):
-                raise Contradiction(f"{constraint.name}: every option eliminated")
-
-    def _record(self, lit: LiteralId, asserted: bool, rule: str, reason: str) -> None:
-        literal = self._literals[lit]
-        self.log.append(Step(literal.var, literal.value, asserted, rule, reason))
+                raise Contradiction(f"{constraint.name}: every option eliminated", constraint.name)
 
 
 # --- rules ----------------------------------------------------------------
@@ -296,7 +343,12 @@ def rule_single(model: Model) -> bool:
             continue
         live = model.live(constraint.index)
         if len(live) == 1:
-            model.assign(live[0], "single", f"only option left in {constraint.name}")
+            model.assign(
+                live[0],
+                "single",
+                f"only option left in {constraint.name}",
+                sources=(constraint.name,),
+            )
             return True
     return False
 
@@ -313,7 +365,9 @@ def rule_relations(model: Model) -> bool:
         domains = [model.options(var) for var in relation.variables]
         unsupported = _unsupported(model, relation, domains)
         for lit in unsupported:
-            model.eliminate(lit, "relations", f"nothing satisfies {relation.name}")
+            model.eliminate(
+                lit, "relations", f"nothing satisfies {relation.name}", sources=(relation.name,)
+            )
         if unsupported:
             return True
     return False
@@ -370,6 +424,8 @@ def rule_subsumption(model: Model) -> bool:
                         lit,
                         "subsumption",
                         f"{a.name} already uses one of {b.name}",
+                        sources=(a.name,),
+                        scope=(b.name,),
                     )
                 return True
     return False
@@ -484,10 +540,11 @@ class _CoverSearch:
         extra: frozenset[LiteralId],
     ) -> None:
         constraints = self.model.constraints
-        a_names = ", ".join(constraints[a].name for a in sorted(group))
-        b_names = ", ".join(constraints[b].name for b in bs)
+        a_names = tuple(constraints[a].name for a in sorted(group))
+        b_names = tuple(constraints[b].name for b in bs)
+        reason = f"{', '.join(a_names)} use up {', '.join(b_names)}"
         for lit in sorted(extra):
-            self.model.eliminate(lit, f"cover{self.k}", f"{a_names} use up {b_names}")
+            self.model.eliminate(lit, f"cover{self.k}", reason, sources=a_names, scope=b_names)
 
 
 _WHAT_IF_INNER = (rule_single, rule_relations, rule_subsumption)
@@ -506,13 +563,16 @@ def rule_what_if(model: Model) -> bool:
         for lit in model.options(var):
             refutation = _refute(model, lit)
             if refutation is not None:
-                model.eliminate(lit, "what_if", refutation)
+                reason, trail, broken = refutation
+                sources = () if broken is None else (broken,)
+                model.eliminate(lit, "what_if", reason, sources=sources, trail=trail)
                 return True
     return False
 
 
-def _refute(model: Model, lit: LiteralId) -> str | None:
-    """Why assuming `lit` leads to a contradiction, or None if it does not."""
+def _refute(model: Model, lit: LiteralId) -> tuple[str, tuple[Step, ...], str | None] | None:
+    """Why assuming `lit` leads to a contradiction, or None if it does not:
+    the reason, the steps taken on the way, and what broke."""
     twin = model.clone()
     try:
         twin.assign(lit, "what_if", "assumed")
@@ -520,7 +580,8 @@ def _refute(model: Model, lit: LiteralId) -> str | None:
         while any(rule(twin) for rule in _WHAT_IF_INNER):
             twin.check()
     except Contradiction as exc:
-        return f"assuming it leads, in {len(twin.log)} steps, to: {exc}"
+        reason = f"assuming it leads, in {len(twin.log)} steps, to: {exc}"
+        return reason, tuple(twin.log), exc.source
     return None
 
 
