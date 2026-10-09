@@ -77,8 +77,9 @@ The repo is **public** (`origin` = `github.com/operdeck/prrrove`).
 
 - **Branch, check, merge.** Work on a feature branch in small,
   single-purpose commits. Before merging into `main` (fast-forward only), all
-  of these must pass: `uvx ruff check src tests`, `uvx ruff format --check
-  src tests`, `uv run mypy src`, `uv run pytest -q`.
+  of these must pass: `uvx ruff check src tests benchmark`, `uvx ruff format --check
+  src tests benchmark`, `uv run mypy src`, `uv run pytest -q`. CI runs the same
+  on every push to `main` (`.github/workflows/tests.yml`).
 - **`prrrdokus/` never leaves this machine.** It holds the private source
   documents; it is gitignored and was removed from all history. Stage files
   by explicit path, never `git add -A`. Before every push, this must print
@@ -112,13 +113,21 @@ Candidates, roughly in order of value:
   *k*-constraint generalisation of subsumption. One rule covers all four
   Sudoku patterns; only connected groups of anchors are searched. *k*=4
   (quads, Jellyfish) is not in the ladder: no example needs it.
-- **Chains.** Build the implication graph over literals (eliminating *x*
-  forces *y* when some `EXACTLY_ONE` drops to one option) and look for
-  contradictions. `what_if` already finds what short chains would, at more
-  cost; chains would explain the same deduction more like a person does.
+- **Chains** — done as `rule_chains`: alternating strong/weak links,
+  shortest chain first, with weak links also from two-variable relations.
+  Each logged step carries the chain (`Step.chain`) and why each link holds
+  (`Step.sources`, one per link), so `proof` can replay it and `story` can
+  tell it. Since chains, `what_if` fires only on `prrrdoku3.txt` and the
+  fiendish Calcudoku. Next: weak links from relations over three or more
+  variables, and keeping links between runs (chains are the slow rung).
 - ~~Bounded what-if~~ — done as `rule_what_if`, using `Model.clone()`. It
   runs only `single`/`relations`/`subsumption` on the copy, never itself,
   so it stays one level deep.
+
+A new rule also needs: a case in `proof.Move` so `--explain` can replay it,
+wording in `story`, and a place in `proof.HARDEST_FIRST`.
+`test_no_step_ever_contradicts_the_brute_force_solution` checks every step
+it logs on every example.
 
 Keep the ladder honest: if a rule never fires on any example, say so rather
 than listing it as working.
@@ -157,12 +166,12 @@ Numbers from actual runs, not estimates:
 | `sudoku_hidden_pair.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `subsumption` 1 |
 | `sudoku_xwing.txt` | solved, 57 iterations | `single` 54, `cover2` 2 |
 | `sudoku_swordfish.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `cover3` 1 |
-| `sudoku_what_if.txt` | solved, 66 iterations | `single` 55, `subsumption` 6, `cover2` 2, `what_if` 2 |
+| `sudoku_chains.txt` | solved, 74 iterations | `single` 55, `subsumption` 9, `chains` 6, `cover2` 3 |
 | `murdoku_intro.txt` | solved, 5 iterations | `single` 4 |
 | `murdoku_house.txt` | solved, 11 iterations | `single` 5, `relations` 4, `subsumption` 1 |
 | `prrrdoku1.txt` | solved, 14 iterations | `single` 7, `relations` 5, `subsumption` 1 |
-| `prrrdoku2.txt` | solved, 22 iterations | `relations` 9, `single` 9, `cover3` 1, `cover2` 1, `what_if` 1 |
-| `prrrdoku3.txt` | solved, 41 iterations | `relations` 15, `single` 9, `what_if` 9, `subsumption` 7 |
+| `prrrdoku2.txt` | solved, 30 iterations | `single` 9, `relations` 8, `chains` 8, `cover2` 3, `cover3` 1 |
+| `prrrdoku3.txt` | solved, 39 iterations | `relations` 14, `single` 9, `subsumption` 7, `what_if` 6, `chains` 2 |
 | `calcudoku_4x4_easy.txt` | solved, 22 iterations | `single` 15, `relations` 6 |
 | `calcudoku_6x6_medium.txt` | solved, 57 iterations | `single` 35, `relations` 21 |
 | `calcudoku_6x6_hard.txt` | solved, 60 iterations | `single` 36, `relations` 20, `cover2` 3 |
@@ -182,13 +191,14 @@ unlock a whole puzzle, so the counts are small.
 
 On Prrrdoku 2, `cover3` is the document's step "Tim, Jos and Pip fill rows
 1-3, so Anna is outside them", and `cover2` is "Pip and Mao fill columns 8
-and 9". The document then splits on Otto's square; `what_if` instead rules
-out Tim on r2c3 (Jos is left with nowhere to go). Different route, same
-answer.
+and 9". The document then splits on Otto's square; `chains` instead links
+Otto's two squares to Luna's and Tjitske's ("if Otto is not on r6c5, he is
+on r7c6, so Luna is not on r7c4 ..."). Different route, same answer.
 
-Prrrdoku 3 leans on `what_if` hardest (9 firings). The document's own
-solution argues by cases there too ("Waar zit Anna?") rather than with a
-single named pattern. Chains would explain that more like a person does.
+Prrrdoku 3 leans on `what_if` hardest (6 firings, 9 before chains). The
+document's own solution argues by cases there too ("Waar zit Anna?"). Its
+key clue, "Luna is furthest from Mao", is a three-person relation, which
+gives chains no weak links yet.
 
 ## Known gaps
 
@@ -206,9 +216,8 @@ single named pattern. Chains would explain that more like a person does.
   `outside` line per other person in the `Rules:` section of
   `prrrdoku3.txt`, so clue numbers still match the document.
 - `--explain` follows the solver's own route, shortened. Where the solver
-  needs `what_if` (Prrrdoku 3), the story says "X kan niet op ...: dan ..."
-  rather than the document's more insightful case splits. Chains would
-  help here too.
+  still needs `what_if` (Prrrdoku 3), the story says "X kan niet op ...:
+  dan ..." rather than the document's more insightful case splits.
 - `relations` re-scans every relation from scratch on each pass (it prunes
   a whole relation per firing, so there are few passes). Three-way
   relations (`furthest`) make each scan quadratic in domain size. A

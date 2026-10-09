@@ -100,8 +100,10 @@ Sudoku is 4 × 4 or 9 × 9; Calcudoku any size.
   after every deduction; `--show-model` shows what the engine sees.
 - **Checks itself.** `--brute-force` solves by plain search, sharing nothing
   with the engine, to confirm a puzzle has exactly one solution. Every
-  example is checked this way, and every placement `--explain` states is
-  checked against it.
+  example is checked this way, and so is every single deduction the solver
+  makes on it.
+- **Grades puzzles** by the hardest rule they need (`--grade`), from
+  `single` up to `chains` and `what_if`.
 - **Draws the puzzle** (`--png`): Murdoku with region colours, icons and name
   tags; Sudoku and Calcudoku with boxes, cages and targets.
 
@@ -128,10 +130,13 @@ detected from the file; `--type sudoku|murdoku|calcudoku` overrides that.
 | `--show-model` | Explain what the engine sees, then stop: variables, constraint families, how literals and constraints overlap, what the clues settled at compile time, each relation, and the rule ladder. The quickest way into the design. |
 | `--brute-force` | Find the solutions by plain search instead of deduction, then stop. Exit code 0 if there is exactly one, 1 if there are none or several (it shows two and where they differ). The check to run after transcribing a puzzle. |
 | `--explain` | Murdoku only: write out a short worked solution, as Markdown bullets, in the puzzle's language. See [Worked solutions](#worked-solutions). |
+| `--grade` | Print only the puzzle's grade: the hardest rule the solve needed (`single` ... `chains`, `what_if`), or `unsolved`. |
 | `--png FILE` | Draw the puzzle as a picture in FILE, and once solved the solution in FILE with `-solution` added (`board.png`, `board-solution.png`). Combines with the other options. |
 
-Without `--brute-force` the exit code is 0 when the puzzle is solved, 1 when
-the rules run out or hit a contradiction, and 2 when the file cannot be read.
+Every solve ends with a summary such as `rules used: single 54, cover2 2;
+grade: cover2`. Without `--brute-force` the exit code is 0 when the puzzle
+is solved, 1 when the rules run out or hit a contradiction, and 2 when the
+file cannot be read.
 
 ## Examples
 
@@ -142,12 +147,12 @@ the rules run out or hit a contradiction, and 2 when the file cannot be read.
 | `sudoku_pointing.txt` | `subsumption` (pointing pair) |
 | `sudoku_naked_pair.txt`, `sudoku_hidden_pair.txt`, `sudoku_xwing.txt` | `cover2` |
 | `sudoku_swordfish.txt` | `cover3` |
-| `sudoku_what_if.txt` | `what_if` |
+| `sudoku_chains.txt` | `chains` |
 | `murdoku_intro.txt` | `single` only: the 4×4 first case above |
 | `murdoku_house.txt` | `relations`, `subsumption`: a 5×5 using "not next to" and a counting clue |
 | `prrrdoku1.txt` | `relations`, `subsumption` |
-| `prrrdoku2.txt` | `cover2`, `cover3`, `what_if` |
-| `prrrdoku3.txt` | `what_if`, many times |
+| `prrrdoku2.txt` | `cover2`, `cover3`, `chains` |
+| `prrrdoku3.txt` | `chains`, `what_if` |
 | `calcudoku_4x4_easy.txt`, `calcudoku_6x6_medium.txt` | `relations` (cage arithmetic) |
 | `calcudoku_6x6_hard.txt` | `cover2` |
 | `calcudoku_6x6_fiendish.txt` | `what_if` |
@@ -211,6 +216,7 @@ Applied cheapest-first; any success restarts the ladder.
 | `relations` | Arc consistency: drop every value of a relation that no combination of the other variables' values supports. |
 | `subsumption` | If `live(A) ⊆ live(B)` and A is `EXACTLY_ONE`, every B-literal outside A is false. |
 | `cover2`, `cover3` | The same over *k* constraints: *k* disjoint `EXACTLY_ONE`s whose live literals fit inside *k* others use those others up. |
+| `chains` | Alternating inference chains. A *strong* link joins the last two options of an `EXACTLY_ONE` (one of them holds); a *weak* link joins two options that cannot both hold (they share a constraint, or a two-variable relation forbids the pair). Assume a start option false and follow strong and weak links in turn: an option reached as true means "the start or this one" holds, so anything weakly linked to both is false. |
 | `what_if` | Assume a literal on a copy, run `single`/`relations`/`subsumption`; if that contradicts, the literal is false. |
 
 `single` covers Sudoku's naked single *and* hidden single with no
@@ -222,20 +228,46 @@ special-casing — they are the same statement about different constraints
 digit-in-house), X-Wing (*k*=2) and Swordfish (*k*=3) (As are digit-in-row,
 Bs digit-in-column) — one rule, again with no special-casing.
 
+`chains` is simple colouring, X- and XY-chains, Y- and W-wings and 3D
+Medusa in one rule. Weak links from two-person clues and two-cell cages make
+it work on Murdoku and Calcudoku as well. `--explain` tells a chain as "if
+Otto is not on r6c5, then Otto is on r7c6, then Luna is not on r7c4 (row 7),
+then Luna is on r8c3; so ...", with the reason for each link.
+
 `what_if` is the case split a person does when stuck ("if Tim were on r2c3,
 Jos would have nowhere to go"). It is last on the ladder and bounded: one
-assumption, cheap rules only, no nested guessing.
+assumption, cheap rules only, no nested guessing. Since `chains`, only
+`prrrdoku3.txt` and the fiendish Calcudoku still need it.
 
-Not implemented: chains. See `AGENT.md`.
+### Compared with a technique-by-technique solver
+
+[Dedoku](https://github.com/n36l3c7/Dedoku) is a Sudoku solver with the same
+philosophy: logic only, every step named and explained. It implements 20
+technique families, each written for Sudoku's cells, rows and boxes, and it
+inspired several things here: the `chains` rule, the step-by-step soundness
+test, grading and the benchmark. Because this engine sees only literals and
+exactly-one / at-most-one groups, many of those families are one rule here:
+
+| Sudoku techniques | Here |
+|---|---|
+| Naked and hidden singles | `single` |
+| Pointing and claiming (intersection removal) | `subsumption` |
+| Naked and hidden pairs and triples, X-Wing, Swordfish | `cover2`, `cover3` |
+| Simple colouring, X-Chain, XY-Chain, Y-Wing, W-Wing, 3D Medusa, AIC | `chains` |
+| Quads, Jellyfish, finned fish, ALS-XZ, XYZ-Wing | not yet; see [Possible improvements](#possible-improvements) |
+| Unique and Avoidable Rectangles, BUG | not planned: they assume the puzzle has exactly one solution, while every rule here must be sound for any model |
 
 ## Verification
 
 ```bash
-uv run pytest -q                        # 140 tests
-uvx ruff check src tests                # lint
-uvx ruff format --check src tests       # formatting
+uv run pytest -q                        # 191 tests
+uvx ruff check src tests benchmark      # lint
+uvx ruff format --check src tests benchmark   # formatting
 uv run mypy src                         # strict type check
 ```
+
+GitHub Actions runs all four on every push to `main`, on Python 3.12 and
+3.13.
 
 Correctness is checked against ground truth, not self-consistency:
 
@@ -247,8 +279,11 @@ Correctness is checked against ground truth, not self-consistency:
   brute-force solution, and the engine must find that same solution.
   `--brute-force` runs it from the command line; exit code 0 means the
   puzzle is unique, so it is the check to run after transcribing a puzzle.
+- **Every step.** On every example, every placement and every elimination
+  the solver logs, compile time included, is checked against the
+  brute-force solution. A rule that ever removes a true option fails this.
 - The graded Sudokus (`sudoku_pointing`, `_naked_pair`, `_hidden_pair`,
-  `_xwing`, `_swordfish`, `_what_if`) and Calcudokus must also show their
+  `_xwing`, `_swordfish`, `_chains`) and Calcudokus must also show their
   named pattern in the log, and must stall when the ladder is cut just
   before their rule, so each example really exercises that rung.
 - `prrrdoku1-3.txt` are checked against the published solutions and the
@@ -258,6 +293,23 @@ Correctness is checked against ground truth, not self-consistency:
   tests rather than quietly solving a different puzzle.
 - Calcudoku solutions are also checked as properties: every row and column
   is a permutation, and every cage makes its target.
+
+### Benchmark
+
+`uv run python benchmark/run.py --count 30 --seed 42` generates seeded random
+Sudokus, each made minimal (no given can go without losing uniqueness,
+checked by brute force), then grades and times them:
+
+| Grade | Puzzles | Median ms | Max ms |
+|---|---:|---:|---:|
+| `single` | 13 | 11.4 | 12.7 |
+| `subsumption` | 7 | 20.3 | 33.9 |
+| `cover2` | 1 | 19.6 | 19.6 |
+| `chains` | 9 | 833.8 | 2006.1 |
+
+All 30 are solved by logic. Without `chains`, `what_if` had to settle nine
+of them; with it, none. Chains are the slow part: the links are rebuilt from
+scratch every time the rule runs (see below).
 
 ## Puzzle files
 
@@ -398,9 +450,11 @@ src/csp/
   picture.py     --png: pictures of all three puzzle types (Pillow)
   icons.py       object name -> Noto Emoji picture, fetched and cached on use
 examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
-                 need), murdoku_intro.txt, prrrdoku1-3.txt
+                 need), murdoku_*.txt, prrrdoku1-3.txt
+benchmark/       run.py: grade and time generated Sudokus
 docs/images/     the README's pictures, drawn by --png
 tests/           test_solver.py, test_picture.py, test_story.py
+.github/         CI workflow
 ```
 
 ## TODO
@@ -442,7 +496,19 @@ several. A hand-written sentence parser is not planned.
   *virtual cages* (a row adds up to 1 + 2 + ... + n, so the cells a row's
   cages leave over must make up the difference). Both would also open the
   door to Killer Sudoku and Kakuro.
-- **Chains.** Follow implications from one candidate to the next ("if Otto
-  is here, Pip must be there, so ...") until a contradiction. This covers
-  what `what_if` does now, but reads the way a person reasons, so
-  `--explain` would say more than "X cannot be on r1c7: then ...".
+- **Faster chains.** `chains` rebuilds every link each time it runs and
+  searches from every start. Keeping the links between runs, and updating
+  only what the last deduction changed, would cut most of that.
+- **Weak links from bigger relations.** Only two-variable relations give
+  weak links now. Cages of three or more cells, and three-person clues,
+  could add them too ("these two values cannot both hold, whatever the
+  third cell is"), which would let chains replace `what_if` on the fiendish
+  Calcudoku.
+- **More Sudoku-style patterns, generically.** `cover4` (quads, Jellyfish)
+  already exists but is not on the ladder; *finned* covers (a cover that
+  holds except for a few stray options, so anything clashing with all of
+  them goes) and *almost* covers (k groups fitting in k + 1, as in ALS-XZ)
+  would follow the same generic pattern.
+- **A hybrid mode.** When the rules stall, finish with the brute force and
+  mark those placements as guesses, so the path never hides how a value was
+  found.
