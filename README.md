@@ -60,6 +60,37 @@ Both pictures and the solution text are generated from
 ./solve.sh examples/murdoku_intro.txt --explain         # the worked solution above
 ```
 
+## Also Sudoku and Calcudoku
+
+The same engine, with the same kind of pictures. Givens are black; what the
+solver fills in is blue.
+
+<table>
+<tr>
+<th>Mini Sudoku</th>
+<th>Calcudoku</th>
+</tr>
+<tr>
+<td>Every row, column and 2 × 2 box holds 1–4 once.</td>
+<td>Every row and column holds 1–4 once. Each cage's numbers make its
+target with its sign: <code>9+</code> adds up to 9, <code>12x</code>
+multiplies to 12, <code>2/</code> divides to 2.</td>
+</tr>
+<tr>
+<td><img src="docs/images/sudoku_4x4.png" width="230" alt="A 4 by 4 Sudoku">
+<img src="docs/images/sudoku_4x4-solution.png" width="230" alt="Its solution"></td>
+<td><img src="docs/images/calcudoku_4x4_easy.png" width="230" alt="A 4 by 4 Calcudoku">
+<img src="docs/images/calcudoku_4x4_easy-solution.png" width="230" alt="Its solution"></td>
+</tr>
+</table>
+
+```bash
+./solve.sh examples/sudoku_4x4.txt --png sudoku.png           # sudoku.png, sudoku-solution.png
+./solve.sh examples/calcudoku_4x4_easy.txt --png calcudoku.png
+```
+
+Sudoku is 4 × 4 or 9 × 9; Calcudoku any size.
+
 ## What else it does
 
 - **Explains itself.** `--explain` writes a short worked solution, in English
@@ -70,7 +101,8 @@ Both pictures and the solution text are generated from
   with the engine, to confirm a puzzle has exactly one solution. Every
   example is checked this way, and every placement `--explain` states is
   checked against it.
-- **Draws the board** (`--png`) with region colours, icons and name tags.
+- **Draws the puzzle** (`--png`): Murdoku with region colours, icons and name
+  tags; Sudoku and Calcudoku with boxes, cages and targets.
 
 ```bash
 ./solve.sh examples/prrrdoku3.txt --explain        # a 9 × 9 with three cats, in Dutch
@@ -95,7 +127,7 @@ detected from the file; `--type sudoku|murdoku|calcudoku` overrides that.
 | `--show-model` | Explain what the engine sees, then stop: variables, constraint families, how literals and constraints overlap, what the clues settled at compile time, each relation, and the rule ladder. The quickest way into the design. |
 | `--brute-force` | Find the solutions by plain search instead of deduction, then stop. Exit code 0 if there is exactly one, 1 if there are none or several (it shows two and where they differ). The check to run after transcribing a puzzle. |
 | `--explain` | Murdoku only: write out a short worked solution, as Markdown bullets, in the puzzle's language. See [Worked solutions](#worked-solutions). |
-| `--png FILE` | Murdoku only: draw the board as a picture in FILE, and once solved the solution in FILE with `-solution` added (`board.png`, `board-solution.png`). Combines with the other options. |
+| `--png FILE` | Draw the puzzle as a picture in FILE, and once solved the solution in FILE with `-solution` added (`board.png`, `board-solution.png`). Combines with the other options. |
 
 Without `--brute-force` the exit code is 0 when the puzzle is solved, 1 when
 the rules run out or hit a contradiction, and 2 when the file cannot be read.
@@ -104,6 +136,7 @@ the rules run out or hit a contradiction, and 2 when the file cannot be read.
 
 | File | Needs |
 |---|---|
+| `sudoku_4x4.txt` | `single` only: the mini Sudoku above |
 | `sudoku_easy.txt` | `single` only |
 | `sudoku_pointing.txt` | `subsumption` (pointing pair) |
 | `sudoku_naked_pair.txt`, `sudoku_hidden_pair.txt`, `sudoku_xwing.txt` | `cover2` |
@@ -226,7 +259,8 @@ Correctness is checked against ground truth, not self-consistency:
 
 ## Puzzle files
 
-Sudoku is a plain grid; `.`/`0` are blanks, and `|`/`-` are ignored.
+Sudoku is a plain 4 × 4 or 9 × 9 grid; `.`/`0` are blanks, and `|`/`-` are
+ignored.
 
 Calcudoku names each cage with a letter on the grid, then gives its rule:
 
@@ -321,7 +355,9 @@ Murdoku: region colours (from `Regions:`, or a default palette), a darker shade
 under objects, hatching where `Hatched:` says, thick lines between regions,
 icons for objects and furniture, name tags for people, coordinates and a
 legend. Because it is drawn from the same file the solver reads, the picture
-cannot disagree with the puzzle.
+cannot disagree with the puzzle. Sudoku and Calcudoku pictures share the
+look: thick lines around boxes or cages, alternate boxes shaded, cages in
+pastels that never match a neighbour, each cage's target in its corner.
 
 Icons are referenced, not stored in the repo: `src/csp/icons.py` maps object
 names (Dutch and English, e.g. `koffer`/`suitcase`; `boom2` counts as `boom`)
@@ -347,7 +383,7 @@ src/csp/
   report.py      --show-model: a plain-text account of any compiled model
   cli.py         command line
   bruteforce/    --brute-force: plain search per puzzle family, no engine
-  picture.py     --png: Murdoku board pictures (Pillow)
+  picture.py     --png: pictures of all three puzzle types (Pillow)
   icons.py       object name -> Noto Emoji picture, fetched and cached on use
 examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
                  need), murdoku_intro.txt, prrrdoku1-3.txt

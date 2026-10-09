@@ -124,6 +124,7 @@ Numbers from actual runs, not estimates:
 
 | Puzzle | Result | Rules that fired |
 |---|---|---|
+| `sudoku_4x4.txt` | solved, 12 iterations | `single` 11 |
 | `sudoku_easy.txt` | solved, 52 iterations | `single` 51 |
 | `sudoku_pointing.txt` | solved, 60 iterations | `single` 57, `subsumption` 2 |
 | `sudoku_naked_pair.txt` | solved, 65 iterations | `single` 58, `subsumption` 4, `cover2` 2 |
