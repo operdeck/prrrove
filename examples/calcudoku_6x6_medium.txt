@@ -1,0 +1,31 @@
+# Calcudoku - Medium 6x6: cage arithmetic and singles are enough, but only after many rounds.
+# Generated; uniqueness checked by an independent brute-force search.
+
+Size: 6
+
+Grid:
+h g g g a n
+h b b k a n
+h q j k i i
+f l j e e p
+f l l m m p
+c c d d o o
+
+Cages:
+a: 4/
+b: 1-
+c: 9+
+d: 2/
+e: 2-
+f: 5x
+g: 9+
+h: 24x
+i: 3-
+j: 3-
+k: 2-
+l: 90x
+m: 3/
+n: 1-
+o: 6+
+p: 8x
+q: 2

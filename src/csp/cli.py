@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from . import murdoku, report, sudoku
+from . import calcudoku, murdoku, report, sudoku
 from .core import DEFAULT_RULES, Model, Solver, Step
 from .puzzlefile import load_board
 
@@ -21,7 +21,12 @@ class Puzzle:
     draw: Callable[[str, Sequence[Step]], str]
 
 
+KINDS = ("sudoku", "murdoku", "calcudoku")
+
+
 def detect(text: str) -> str:
+    if "Cages:" in text:
+        return "calcudoku"
     return "murdoku" if "Regions:" in text else "sudoku"
 
 
@@ -30,6 +35,9 @@ def load(text: str, kind: str) -> Puzzle:
     if kind == "sudoku":
         model, _ = sudoku.compile_puzzle(text)
         return Puzzle(kind, model, partial(sudoku.render, model))
+    if kind == "calcudoku":
+        model, grid = calcudoku.compile_puzzle(text)
+        return Puzzle(kind, model, partial(calcudoku.render, model, grid))
     board, clues = load_board(text)
     model = murdoku.compile_puzzle(board, clues)
     return Puzzle(kind, model, partial(murdoku.render, board, model))
@@ -55,7 +63,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--step", "-s", action="store_true", help="redraw and pause after each deduction"
     )
-    parser.add_argument("--type", choices=["auto", "sudoku", "murdoku"], default="auto")
+    parser.add_argument("--type", choices=["auto", *KINDS], default="auto")
     parser.add_argument(
         "--show-model",
         action="store_true",

@@ -4,13 +4,15 @@ One constraint engine, several puzzles. Each puzzle family is compiled down to
 literals and constraints; the solving rules never learn anything about the
 puzzle they are solving.
 
-Currently solved: **Sudoku** (9x9) and **Murdoku/Prrrdoku** (any size).
+Currently solved: **Sudoku** (9x9), **Murdoku/Prrrdoku** (any size) and
+**Calcudoku/KenKen** (any size).
 Requires Python 3.12+; no runtime dependencies.
 
 ```bash
 ./solve.sh examples/sudoku_easy.txt
 ./solve.sh examples/prrrdoku1.txt --verbose
 ./solve.sh examples/prrrdoku1.txt --step      # redraw and pause each deduction
+./solve.sh examples/calcudoku_6x6_hard.txt --step
 ./solve.sh examples/prrrdoku1.txt --show-model  # explain the compiled model, don't solve
 ```
 
@@ -39,16 +41,20 @@ two is exactly the bug that made an earlier version of this code unsound on
 Murdoku: with 7 people over 43 squares, most squares stay empty, so "this
 square is only possible for Vladimir" says nothing at all.
 
-## How the two puzzles map
+## How the puzzles map
 
-| | Sudoku | Murdoku |
-|---|---|---|
-| Variable | a cell | a **person** |
-| Literal | cell holds digit | person stands on square |
-| `EXACTLY_ONE` | cell holds one digit | person stands somewhere |
-| | digit once per row / col / box | one person per row; one per column |
-| `AT_MOST_ONE` | — | square holds at most one person |
-| Relations | — | position, distance and region clues; see [Puzzle files](#puzzle-files) |
+| | Sudoku | Murdoku | Calcudoku |
+|---|---|---|---|
+| Variable | a cell | a **person** | a cell |
+| Literal | cell holds digit | person stands on square | cell holds number |
+| `EXACTLY_ONE` | cell holds one digit | person stands somewhere | cell holds one number |
+| | digit once per row / col / box | one person per row; one per column | number once per row / col |
+| `AT_MOST_ONE` | — | square holds at most one person | — |
+| Relations | — | position, distance and region clues; see [Puzzle files](#puzzle-files) | one per cage: its arithmetic |
+
+A Calcudoku is a Sudoku without boxes plus one relation per cage. The cage
+relation also requires distinct numbers where its cells share a row or
+column, so arc consistency rules out "3+3" inside a line without help.
 
 Murdoku's variables are people rather than squares because that is the shape
 of the rules: "exactly one figure per row" puts seven figures on a 7x7 board,
@@ -111,6 +117,26 @@ Correctness is checked against ground truth, not self-consistency:
 
 Sudoku is a plain grid; `.`/`0` are blanks, and `|`/`-` are ignored.
 
+Calcudoku names each cage with a letter on the grid, then gives its rule:
+
+```
+Size: 4
+Grid:
+a a b c
+d e b c
+d e f f
+g h h i
+Cages:
+a: 3-          # difference; 2-cell cages only
+b: 7+          # sum
+c: 2/          # quotient, larger first; 2-cell cages only
+h: 3x          # product; also *, ×
+g: 4           # one-cell cage: the number itself
+```
+
+The typographic signs ×, − and ÷ are accepted as printed. Cages must be
+connected, and every cage on the grid needs a rule.
+
 Murdoku uses named sections — see `examples/prrrdoku*.txt`:
 
 ```
@@ -147,10 +173,12 @@ is a three-way relation (Luna, Mao, that person).
 src/csp/
   core.py        engine: literals, constraints, relations, rules, solver
   sudoku.py      Sudoku compiler + renderer
+  calcudoku.py   Calcudoku/KenKen compiler + renderer with pencil marks
   murdoku.py     Murdoku compiler + renderer + clue vocabulary
   puzzlefile.py  reader for the sectioned Murdoku format
   report.py      --show-model: a plain-text account of any compiled model
   cli.py         command line
-examples/        sudoku_*.txt (graded by the rule they need), prrrdoku1-3.txt
+examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
+                 need), prrrdoku1-3.txt
 tests/           test_solver.py
 ```

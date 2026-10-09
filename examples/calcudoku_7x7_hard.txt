@@ -1,0 +1,35 @@
+# Calcudoku - Hard 7x7: needs a triple or Swordfish style deduction (cover3).
+# Generated; uniqueness checked by an independent brute-force search.
+
+Size: 7
+
+Grid:
+c q j j m m m
+c q j e e h o
+c a a a l h h
+r r r l l t i
+k k k f f f i
+d d g b s n p
+d g g b s n p
+
+Cages:
+a: 10+
+b: 9+
+c: 21x
+d: 12+
+e: 2-
+f: 30x
+g: 36x
+h: 13+
+i: 21x
+j: 13+
+k: 13+
+l: 12x
+m: 14+
+n: 3-
+o: 1
+p: 10x
+q: 6+
+r: 72x
+s: 10+
+t: 5

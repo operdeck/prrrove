@@ -118,6 +118,17 @@ Numbers from actual runs, not estimates:
 | `prrrdoku1.txt` | solved, 16 iterations | `relations` 7, `single` 7, `subsumption` 1 |
 | `prrrdoku2.txt` | solved, 22 iterations | `relations` 9, `single` 9, `cover3` 1, `cover2` 1, `what_if` 1 |
 | `prrrdoku3.txt` | solved, 42 iterations | `relations` 16, `what_if` 12, `single` 9, `subsumption` 4 |
+| `calcudoku_4x4_easy.txt` | solved, 22 iterations | `single` 15, `relations` 6 |
+| `calcudoku_6x6_medium.txt` | solved, 57 iterations | `single` 35, `relations` 21 |
+| `calcudoku_6x6_hard.txt` | solved, 60 iterations | `single` 36, `relations` 20, `cover2` 3 |
+| `calcudoku_6x6_fiendish.txt` | solved, 73 iterations | `single` 35, `relations` 30, `cover2` 4, `what_if` 3 |
+| `calcudoku_7x7_hard.txt` | solved, 80 iterations | `single` 47, `relations` 26, `cover2` 4, `cover3` 2 |
+
+The Calcudokus were generated the same way as the graded Sudokus (random
+Latin square, random cages, uniqueness checked by brute force) because
+newspaper puzzles are copyrighted. A test re-checks each against its own
+brute-force solver. Most random 6x6 Calcudokus need only `relations`; about
+one in ten needs `cover2`, and fewer need `what_if`.
 
 The graded Sudokus were generated (random minimal puzzles, uniqueness checked
 by backtracking) and picked because each needs its rule: the tests cut the

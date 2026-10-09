@@ -311,14 +311,7 @@ def rule_relations(model: Model) -> bool:
     """
     for relation in model.relations:
         domains = [model.options(var) for var in relation.variables]
-        unsupported = [
-            lit
-            for position, candidates in enumerate(domains)
-            for lit in candidates
-            if not _supported(
-                model, relation, position, lit, domains[:position] + domains[position + 1 :]
-            )
-        ]
+        unsupported = _unsupported(model, relation, domains)
         for lit in unsupported:
             model.eliminate(lit, "relations", f"nothing satisfies {relation.name}")
         if unsupported:
@@ -326,20 +319,25 @@ def rule_relations(model: Model) -> bool:
     return False
 
 
-def _supported(
-    model: Model,
-    relation: Relation,
-    position: int,
-    lit: LiteralId,
-    others: list[list[LiteralId]],
-) -> bool:
-    """Whether some choice for the other variables makes `relation` hold."""
-    for combo in product(*others):
-        values = [model.value_of(other) for other in combo]
-        values.insert(position, model.value_of(lit))
-        if relation.holds(*values):
-            return True
-    return False
+def _unsupported(
+    model: Model, relation: Relation, domains: list[list[LiteralId]]
+) -> list[LiteralId]:
+    """Options that appear in no combination satisfying `relation`.
+
+    One pass over the combinations serves every variable at once, skipping
+    combinations that could not support anything new, and stopping as soon
+    as every option has support.
+    """
+    lacking = [set(options) for options in domains]
+    for combo in product(*domains):
+        if not any(lit in lacking[i] for i, lit in enumerate(combo)):
+            continue
+        if relation.holds(*(model.value_of(lit) for lit in combo)):
+            for i, lit in enumerate(combo):
+                lacking[i].discard(lit)
+            if not any(lacking):
+                return []
+    return [lit for i, options in enumerate(domains) for lit in options if lit in lacking[i]]
 
 
 def rule_subsumption(model: Model) -> bool:

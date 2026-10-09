@@ -1,0 +1,29 @@
+# Calcudoku - Hard 6x6: needs a pair or X-Wing style deduction (cover2).
+# Generated; uniqueness checked by an independent brute-force search.
+
+Size: 6
+
+Grid:
+c o o d a e
+c c i d a e
+l l i i h n
+j j b i h n
+m m b b g g
+f f k k k g
+
+Cages:
+a: 3+
+b: 10+
+c: 12+
+d: 2-
+e: 12x
+f: 3-
+g: 14+
+h: 20x
+i: 17+
+j: 2/
+k: 10+
+l: 2/
+m: 3x
+n: 4-
+o: 2-

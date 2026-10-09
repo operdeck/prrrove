@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from csp import cli, murdoku, report, sudoku
+from csp import calcudoku, cli, murdoku, report, sudoku
 from csp.core import (
     DEFAULT_RULES,
     Contradiction,
@@ -372,10 +372,7 @@ def test_parse_square_rejects_garbage():
 def test_every_step_is_logged_under_its_rule_name(name):
     """Narration groups steps by rule, so the names in the log must match the ladder."""
     text = (EXAMPLES / name).read_text()
-    if "Regions:" in text:
-        model = murdoku.compile_puzzle(*load_board(text))
-    else:
-        model, _ = sudoku.compile_puzzle(text)
+    model = cli.load(text, cli.detect(text)).model
     fired: list[tuple[str, set[str]]] = []
     Solver(model).solve(on_step=lambda rule, steps: fired.append((rule, {s.rule for s in steps})))
     assert fired
@@ -526,6 +523,139 @@ def test_unknown_region_name_is_rejected():
     board = murdoku.Board(2, [[0, 0], [0, 0]], {0: "here"}, {}, ["A", "B"])
     with pytest.raises(ValueError):
         murdoku.compile_puzzle(board, [("in_region", ["A", "nowhere"])])
+
+
+# --- calcudoku -----------------------------------------------------------
+
+
+def _brute_force_calcudoku(text: str) -> list[dict[str, int]]:
+    """Every solution, by plain search with its own arithmetic: shares no code
+    with the engine beyond reading the file."""
+    puzzle = calcudoku.parse(text)
+    n = puzzle.size
+    cage_of = {cell: cage for cage in puzzle.cages for cell in cage.cells}
+
+    def makes(op, target, vals):
+        if op is None:
+            return vals == [target]
+        if op == "+":
+            return sum(vals) == target
+        if op == "x":
+            result = 1
+            for v in vals:
+                result *= v
+            return result == target
+        a, b = sorted(vals)
+        return b - a == target if op == "-" else b == a * target
+
+    grid: dict[tuple[int, int], int] = {}
+    found: list[dict[str, int]] = []
+
+    def go(i: int) -> None:
+        if i == n * n:
+            found.append({calcudoku.cell_name(c): v for c, v in grid.items()})
+            return
+        r, c = divmod(i, n)
+        for v in range(1, n + 1):
+            if any(grid.get((r, j)) == v for j in range(c)) or any(
+                grid.get((k, c)) == v for k in range(r)
+            ):
+                continue
+            grid[(r, c)] = v
+            cage = cage_of[(r, c)]
+            vals = [grid[cell] for cell in cage.cells if cell in grid]
+            if len(vals) == len(cage.cells):
+                ok = makes(cage.operator, cage.target, vals)
+            elif cage.operator == "+":
+                ok = sum(vals) < cage.target
+            elif cage.operator == "x":
+                ok = cage.target % makes_product(vals) == 0
+            else:
+                ok = True
+            if ok:
+                go(i + 1)
+            del grid[(r, c)]
+
+    def makes_product(vals):
+        result = 1
+        for v in vals:
+            result *= v
+        return result
+
+    go(0)
+    return found
+
+
+# file, the rule it needs
+CALCUDOKUS = [
+    ("calcudoku_4x4_easy.txt", "relations"),
+    ("calcudoku_6x6_medium.txt", "relations"),
+    ("calcudoku_6x6_hard.txt", "cover2"),
+    ("calcudoku_6x6_fiendish.txt", "what_if"),
+    ("calcudoku_7x7_hard.txt", "cover3"),
+]
+
+
+@pytest.mark.parametrize("name, rule", CALCUDOKUS)
+def test_calcudoku_matches_the_unique_brute_force_solution(name, rule):
+    text = (EXAMPLES / name).read_text()
+    (expected,) = _brute_force_calcudoku(text)
+    model, _ = calcudoku.compile_puzzle(text)
+    result = Solver(model).solve()
+    assert result.solved
+    assert result.assignment == expected
+
+
+@pytest.mark.parametrize("name, rule", CALCUDOKUS)
+def test_calcudoku_solution_obeys_every_rule(name, rule):
+    """A property check: Latin square, and every cage makes its target."""
+    text = (EXAMPLES / name).read_text()
+    model, puzzle = calcudoku.compile_puzzle(text)
+    result = Solver(model).solve()
+    assert result.solved
+    n = puzzle.size
+    grid = [[result.assignment[calcudoku.cell_name((r, c))] for c in range(n)] for r in range(n)]
+    assert all(sorted(row) == list(range(1, n + 1)) for row in grid)
+    assert all(sorted(col) == list(range(1, n + 1)) for col in zip(*grid, strict=True))
+    assert all(cage.holds([grid[r][c] for r, c in cage.cells]) for cage in puzzle.cages)
+
+
+@pytest.mark.parametrize("name, rule", [c for c in CALCUDOKUS if c[1] != "relations"])
+def test_calcudoku_stalls_without_its_rule(name, rule):
+    model, _ = calcudoku.compile_puzzle((EXAMPLES / name).read_text())
+    result = Solver(model, _before(rule)).solve()
+    assert not result.solved and result.contradiction is None
+
+
+@pytest.mark.parametrize(
+    "grid, cages, problem",
+    [
+        ("a a\nb b", "a: 3+", "no rule for cages"),
+        ("a a\nb b", "a: 3+\nb: 3+\nc: 1", "not on the grid"),
+        ("a b\nb a", "a: 3+\nb: 3+", "not one connected piece"),
+        ("a a\nb c", "a: 1-\nb: 1\nc: 2/x", "bad rule"),
+        ("a a\na b", "a: 2-\nb: 1", "needs exactly two cells"),
+        ("a a\nb c", "a: 3\nb: 1\nc: 2", "need an operator"),
+    ],
+)
+def test_calcudoku_rejects_malformed_files(grid, cages, problem):
+    with pytest.raises(ValueError, match=problem):
+        calcudoku.parse(f"Size: 2\nGrid:\n{grid}\nCages:\n{cages}\n")
+
+
+def test_cage_arithmetic():
+    cage = calcudoku.Cage
+    assert cage(2, "/", ((0, 0), (0, 1))).holds([3, 6])
+    assert cage(2, "/", ((0, 0), (0, 1))).holds([6, 3])
+    assert not cage(2, "/", ((0, 0), (0, 1))).holds([4, 6])
+    assert cage(3, "-", ((0, 0), (0, 1))).holds([1, 4])
+    assert cage(24, "x", ((0, 0), (0, 1), (1, 0))).holds([2, 3, 4])
+
+
+def test_cli_detects_calcudoku():
+    text = (EXAMPLES / "calcudoku_4x4_easy.txt").read_text()
+    assert cli.detect(text) == "calcudoku"
+    assert cli.main([str(EXAMPLES / "calcudoku_4x4_easy.txt")]) == 0
 
 
 # --- model report ---------------------------------------------------------

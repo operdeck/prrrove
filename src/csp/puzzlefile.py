@@ -1,4 +1,4 @@
-"""Reader for the sectioned puzzle-file format used by Murdoku boards.
+"""Reader for the sectioned puzzle-file format used by Murdoku and Calcudoku.
 
 A file is a series of `Section:` headers, each followed by its lines. A
 one-line section can be written inline before the first header, as in
@@ -10,7 +10,8 @@ import re
 from .murdoku import Board, Clue, Square
 
 
-def _sections(text: str) -> dict[str, list[str]]:
+def read_sections(text: str) -> dict[str, list[str]]:
+    """Section name -> its non-blank, non-comment lines."""
     out: dict[str, list[str]] = {}
     current: str | None = None
     for raw in text.splitlines():
@@ -39,7 +40,7 @@ def parse_square(token: str) -> Square:
 
 def load_board(text: str) -> tuple[Board, list[Clue]]:
     """Read a Murdoku puzzle file into its board and its list of clues."""
-    section = _sections(text)
+    section = read_sections(text)
     for required in ("Size", "Regions", "Grid", "People"):
         if required not in section:
             raise ValueError(f"puzzle file is missing a {required}: section")

@@ -1,0 +1,28 @@
+# Calcudoku - Fiendish 6x6: needs case splits (what_if).
+# Generated; uniqueness checked by an independent brute-force search.
+
+Size: 6
+
+Grid:
+a a b b l l
+a h h k k l
+e e n k d d
+g i i f f d
+g i m c c j
+g g m c j j
+
+Cages:
+a: 13+
+b: 1-
+c: 9+
+d: 20x
+e: 7+
+f: 9+
+g: 14+
+h: 1-
+i: 4x
+j: 12x
+k: 12+
+l: 9+
+m: 11+
+n: 3
