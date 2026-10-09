@@ -71,6 +71,32 @@ Label every constraint with `family=` when compiling a new puzzle type;
 The first paragraph of each rule's docstring is what `--show-model` prints
 as that rule's summary, so keep it to one plain sentence.
 
+## Committing and publishing
+
+The repo is **public** (`origin` = `github.com/operdeck/prrrove`).
+
+- **Branch, check, merge.** Work on a feature branch in small,
+  single-purpose commits. Before merging into `main` (fast-forward only), all
+  of these must pass: `uvx ruff check src tests`, `uvx ruff format --check
+  src tests`, `uv run mypy src`, `uv run pytest -q`.
+- **`prrrdokus/` never leaves this machine.** It holds the private source
+  documents; it is gitignored and was removed from all history. Stage files
+  by explicit path, never `git add -A`. Before every push, this must print
+  `0`: `git rev-list --objects --all | grep -ciE '\.(docx|pdf)$|prrrdokus/'`.
+- **Push as `operdeck`, without prompts:** `GIT_TERMINAL_PROMPT=0 git push
+  origin main`. The repo's local git config gets the token from
+  `gh auth token --user operdeck`; do not switch the global `gh` account, and
+  do not rely on the global credential helpers (they hang on a hidden prompt).
+- **Never force-push** or rewrite history that is on `origin`.
+- **Published puzzles are not copied.** `prrrdoku1-3.txt` are the owner's
+  own puzzles. Anything taken from a book or newspaper gets new names or is
+  generated instead, as `murdoku_intro.txt` and the graded Sudokus and
+  Calcudokus are.
+- **README pictures and solutions are generated**, never hand-edited: redraw
+  `docs/images/*.png` with `--png` and re-run `--explain` whenever drawing or
+  wording changes, and keep the README in step. In the README, "Prrrdoku"
+  appears only as the example file names, not as a general term.
+
 ## Adding a rule
 
 Write `rule_x(model) -> bool` in `core.py`, add `Rule("x", rule_x)` to
