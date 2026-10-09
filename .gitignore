@@ -25,3 +25,6 @@ wheels/
 venv/
 .env
 .DS_Store
+
+# Puzzle documents: kept local, never published
+prrrdokus/
