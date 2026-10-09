@@ -11,7 +11,7 @@ Needs Pillow (`uv sync --extra png`).
 
 from collections.abc import Callable, Iterable, Mapping
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from . import icons
 from .murdoku import Board, Square
@@ -67,11 +67,12 @@ def murdoku_picture(
         for piece in _pieces(squares):
             x0, y0, _, _ = box(min(piece))
             _, _, x1, y1 = box(max(piece))
-            if occupied & set(piece):
+            stretch = len(piece) > 1
+            if occupied & set(piece) and not stretch:
                 y1 = y0 + int(cell * 0.62)  # leave room for the name tag below
                 _icon(image, draw, name, (x0, y0, x1, y1), cell, scale=0.95)
             else:
-                _icon(image, draw, name, (x0, y0, x1, y1), cell)
+                _icon(image, draw, name, (x0, y0, x1, y1), cell, stretch=stretch)
     furnished = board.squares_of(board.furniture)
     for person, sq in (placed or {}).items():
         _name_tag(draw, person, box(sq), cell, low=sq in furnished)
@@ -192,18 +193,48 @@ def _icon(
     area: Box,
     cell: int,
     scale: float = 0.72,
+    stretch: bool = False,
 ) -> None:
+    """Draw `name`'s icon centred in `area`; `stretch` fills the area instead."""
     x0, y0, x1, y1 = area
     path = icons.icon(name)
     if path is None:
         _centred_text(draw, name[:6], area, cell // 5, INK)
         return
-    size = int(min(x1 - x0, y1 - y0) * scale)
     picture = Image.open(path).convert("RGBA")
-    picture.thumbnail((size, size), Image.Resampling.LANCZOS)
+    fix = ICON_FIXES.get(icons.code_for(name) or "")
+    if fix:
+        picture = fix(picture)
+    if stretch:
+        picture = picture.crop(picture.getchannel("A").getbbox())
+        pad = cell // 10
+        size = (x1 - x0 - 2 * pad, y1 - y0 - 2 * pad)
+        picture = picture.resize(size, Image.Resampling.LANCZOS)
+    else:
+        side = int(min(x1 - x0, y1 - y0) * scale)
+        picture.thumbnail((side, side), Image.Resampling.LANCZOS)
     left = x0 + (x1 - x0 - picture.width) // 2
     top = y0 + (y1 - y0 - picture.height) // 2
     image.paste(picture, (left, top), picture)
+
+
+def _drop_floor_lamp(picture: Image.Image) -> Image.Image:
+    """Noto's U+1F6CB is 'couch and lamp': keep the blue couch, drop the lamp.
+
+    The lamp and its pole are yellow and brown and stand above the seat, which
+    starts at 47.5% of the height; every couch pixel up there is blue.
+    """
+    picture = picture.copy()
+    red, _, blue, alpha = picture.split()
+    blueish = ImageChops.subtract(blue, red).point(lambda v: 255 if v > 0 else 0)
+    above_seat = (0, 0, picture.width, int(picture.height * 0.475))
+    alpha.paste(ImageChops.multiply(alpha.crop(above_seat), blueish.crop(above_seat)), above_seat)
+    picture.putalpha(alpha)
+    return picture
+
+
+# Per-icon touch-ups, by code point.
+ICON_FIXES = {"1f6cb": _drop_floor_lamp}
 
 
 def _name_tag(

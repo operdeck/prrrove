@@ -46,6 +46,35 @@ def test_cached_icon_is_used_without_downloading():
     assert icons.icon("koffer") is None  # not cached, and the download fails
 
 
+def _cache_icon(code: str, image: Image.Image) -> None:
+    path = icons.cache_dir() / f"{code}.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(path)
+
+
+def test_two_square_furniture_is_stretched_across_both_squares():
+    _cache_icon("1f6cb", Image.new("RGBA", (40, 40), (0, 0, 255, 255)))  # a blue block
+    board = Board(
+        2, [["a", "a"], ["a", "a"]], {"a": "here"}, {}, ["A", "B"],
+        furniture={"bank": [Square(1, 0), Square(1, 1)]},
+    )  # fmt: skip
+    image = picture.murdoku_picture(board, cell=CELL, coordinates=False)
+    margin = CELL // 6
+    row = margin + CELL + CELL // 2
+    blue = [x for x in range(image.width) if image.getpixel((x, row)) == (0, 0, 255)]
+    assert blue[0] < margin + CELL // 4 and blue[-1] > margin + 2 * CELL - CELL // 4
+
+
+def test_couch_icon_loses_its_floor_lamp():
+    couch = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    couch.paste((250, 210, 0, 255), (60, 0, 90, 40))  # yellow lamp, top right
+    couch.paste((40, 140, 220, 255), (5, 30, 95, 95))  # blue couch, backrest up to y=30
+    cleaned = picture.ICON_FIXES["1f6cb"](couch)
+    assert cleaned.getpixel((75, 10))[3] == 0  # lamp gone
+    assert cleaned.getpixel((20, 35)) == (40, 140, 220, 255)  # backrest kept
+    assert cleaned.getpixel((50, 80)) == (40, 140, 220, 255)  # seat kept
+
+
 def test_picture_shows_regions_objects_and_borders():
     text = (EXAMPLES / "prrrdoku3.txt").read_text()
     board, _ = load_board(text)
