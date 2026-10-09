@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from . import murdoku, sudoku
+from . import murdoku, report, sudoku
 from .core import DEFAULT_RULES, Model, Solver, Step
 from .puzzlefile import load_board
 
@@ -56,6 +56,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--step", "-s", action="store_true", help="redraw and pause after each deduction"
     )
     parser.add_argument("--type", choices=["auto", "sudoku", "murdoku"], default="auto")
+    parser.add_argument(
+        "--show-model",
+        action="store_true",
+        help="explain the compiled model and the solving algorithm, then stop",
+    )
     args = parser.parse_args(argv)
 
     path: Path = args.puzzle
@@ -76,6 +81,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{len(model.relations)} relations"
     )
     print(puzzle.draw("Start", ()))
+
+    if args.show_model:
+        print(f"\n{report.describe(model)}")
+        return 0
 
     def on_step(rule: str, steps: Sequence[Step]) -> None:
         if not (args.verbose or args.step):

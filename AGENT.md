@@ -51,6 +51,12 @@ inspection methods, `assign`/`eliminate`). Renderers learn what changed from
 | engine -> caller | `Solver(model, rules).solve(on_step) -> Result` |
 | progress | `on_step(rule_name, steps)` after each rule that fires |
 | CLI -> puzzle | `cli.load(text, kind) -> Puzzle(kind, model, draw)` |
+| explanation | `report.describe(model, rules) -> str`, public `Model` API only |
+
+Label every constraint with `family=` when compiling a new puzzle type;
+`--show-model` groups by it and falls back to the name with digits masked.
+The first paragraph of each rule's docstring is what `--show-model` prints
+as that rule's summary, so keep it to one plain sentence.
 
 ## Adding a rule
 

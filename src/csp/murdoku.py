@@ -234,24 +234,28 @@ def _add_board_rules(model: Model, board: Board) -> None:
             Kind.EXACTLY_ONE,
             [model.literal(person, sq) for sq in board.free],
             defines=person,
+            family="each person stands on one square",
         )
     for sq in board.free:
         model.constrain(
             f"{sq} holds at most one",
             Kind.AT_MOST_ONE,
             [model.literal(p, sq) for p in board.people],
+            family="each square holds at most one person",
         )
     for i in range(board.size):
         model.constrain(
             f"row {i + 1} holds one person",
             Kind.EXACTLY_ONE,
             _anyone_on(model, board, [sq for sq in board.free if sq.row == i]),
+            family="each row holds one person",
         )
     for i in range(board.size):
         model.constrain(
             f"col {i + 1} holds one person",
             Kind.EXACTLY_ONE,
             _anyone_on(model, board, [sq for sq in board.free if sq.col == i]),
+            family="each column holds one person",
         )
 
 
@@ -270,7 +274,7 @@ def _add_clue(model: Model, board: Board, kind: str, args: list[str]) -> None:
     if kind in FILTERS:
         person, *rest = args
         allowed = FILTERS[kind](board, *rest)
-        label = " ".join([kind, *rest])
+        label = " ".join([kind, *args])
         for sq in board.free:
             if not allowed(sq):
                 model.eliminate(model.literal(person, sq), "clue", label)

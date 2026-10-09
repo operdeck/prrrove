@@ -57,6 +57,7 @@ def compile_puzzle(text: str) -> tuple[Model, Grid]:
             Kind.EXACTLY_ONE,
             [model.literal(name, d) for d in digits],
             defines=name,
+            family="each cell holds one digit",
         )
 
     # Each digit appears exactly once per row, column and box.
@@ -66,12 +67,14 @@ def compile_puzzle(text: str) -> tuple[Model, Grid]:
                 f"{d} once in row {r + 1}",
                 Kind.EXACTLY_ONE,
                 [model.literal(cell_name(r, c), d) for c in range(SIZE)],
+                family="each digit once per row",
             )
         for c in range(SIZE):
             model.constrain(
                 f"{d} once in col {c + 1}",
                 Kind.EXACTLY_ONE,
                 [model.literal(cell_name(r, c), d) for r in range(SIZE)],
+                family="each digit once per column",
             )
         for br in range(BOX):
             for bc in range(BOX):
@@ -80,7 +83,12 @@ def compile_puzzle(text: str) -> tuple[Model, Grid]:
                     for r in range(BOX)
                     for c in range(BOX)
                 ]
-                model.constrain(f"{d} once in box {br + 1},{bc + 1}", Kind.EXACTLY_ONE, members)
+                model.constrain(
+                    f"{d} once in box {br + 1},{bc + 1}",
+                    Kind.EXACTLY_ONE,
+                    members,
+                    family="each digit once per box",
+                )
 
     for row, col in cells:
         given = grid[row][col]

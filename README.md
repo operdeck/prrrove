@@ -11,14 +11,22 @@ Requires Python 3.12+; no runtime dependencies.
 ./solve.sh examples/sudoku_easy.txt
 ./solve.sh examples/prrrdoku1.txt --verbose
 ./solve.sh examples/prrrdoku1.txt --step      # redraw and pause each deduction
+./solve.sh examples/prrrdoku1.txt --show-model  # explain the compiled model, don't solve
 ```
+
+`--show-model` is the quickest way into the design: it prints what the
+engine sees for a puzzle (variables, constraint families, how literals and
+constraints overlap, what the clues settled at compile time, each relation)
+and the rule ladder that would run on it.
 
 ## The model
 
 Three ingredients, defined in `src/csp/core.py`:
 
 - **Literals** — atomic choices. `r3c4=7` for Sudoku, `Tim=r1c1` for Murdoku.
-- **Constraints** — a set of literals tagged `EXACTLY_ONE` or `AT_MOST_ONE`.
+- **Constraints** — a set of literals tagged `EXACTLY_ONE` or `AT_MOST_ONE`,
+  optionally labelled with the *family* it belongs to ("each digit once per
+  row"); the label only serves explanations.
 - **Relations** — a predicate over two or more variables' choices, for clues
   like "Jos is somewhere left of Otto" or "Luna is furthest from Mao".
 
@@ -141,6 +149,7 @@ src/csp/
   sudoku.py      Sudoku compiler + renderer
   murdoku.py     Murdoku compiler + renderer + clue vocabulary
   puzzlefile.py  reader for the sectioned Murdoku format
+  report.py      --show-model: a plain-text account of any compiled model
   cli.py         command line
 examples/        sudoku_*.txt (graded by the rule they need), prrrdoku1-3.txt
 tests/           test_solver.py

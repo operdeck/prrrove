@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from csp import murdoku, sudoku
+from csp import cli, murdoku, report, sudoku
 from csp.core import (
     DEFAULT_RULES,
     Contradiction,
@@ -496,3 +496,46 @@ def test_unknown_region_name_is_rejected():
     board = murdoku.Board(2, [[0, 0], [0, 0]], {0: "here"}, {}, ["A", "B"])
     with pytest.raises(ValueError):
         murdoku.compile_puzzle(board, [("in_region", ["A", "nowhere"])])
+
+
+# --- model report ---------------------------------------------------------
+
+
+def test_report_describes_prrrdoku1_as_the_engine_sees_it():
+    _, model = _load("prrrdoku1.txt")
+    text = report.describe(model)
+    assert "7 variables, 301 literals, 64 constraints, 4 relations." in text
+    assert re.search(r"each square holds at most one person\s+AT_MOST_ONE\s+43\s+7", text)
+    assert "Every literal sits in exactly 4 constraints." in text
+    assert re.search(r"next_to Tim klimwand\s+40 ruled out", text)
+    assert re.search(r"Otto above Tjitske 1\s+24 of 172", text)
+    assert all(re.search(rf"\d\. {rule.name}\s", text) for rule in DEFAULT_RULES)
+    assert "cover2       Subsumption over 2 constraints" in text
+
+
+def test_report_groups_unlabelled_constraints_by_name():
+    m = Model()
+    lits = _variable(m, "x", (1, 2, 3))
+    m.constrain("pair 1", Kind.AT_MOST_ONE, lits[:2])
+    m.constrain("pair 2", Kind.AT_MOST_ONE, lits[1:])
+    assert re.search(r"pair #\s+AT_MOST_ONE\s+2\s+2", report.describe(m))
+
+
+def test_report_leaves_the_model_untouched():
+    model, _ = sudoku.compile_puzzle((EXAMPLES / "sudoku_xwing.txt").read_text())
+    before = (len(model.log), model.assignment(), [model.options(v) for v in model.variables])
+    report.describe(model)
+    assert before == (
+        len(model.log),
+        model.assignment(),
+        [model.options(v) for v in model.variables],
+    )
+
+
+def test_show_model_explains_and_does_not_solve(capsys):
+    assert cli.main([str(EXAMPLES / "sudoku_easy.txt"), "--show-model"]) == 0
+    out = capsys.readouterr().out
+    assert "each digit once per box" in out
+    assert "How the solver will run" in out
+    assert "Solved" not in out
+    assert max(len(line) for line in out.split("Start", 1)[1].splitlines()) <= report.WIDTH

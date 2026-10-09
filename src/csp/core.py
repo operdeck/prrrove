@@ -54,10 +54,17 @@ class Literal:
 
 @dataclass(frozen=True)
 class Constraint:
+    """A set of literals of which exactly one, or at most one, may hold.
+
+    `family` names the rule of the puzzle it is one instance of, such as
+    "each digit once per row"; it only matters for explaining the model.
+    """
+
     index: ConstraintId
     name: str
     kind: Kind
     literals: tuple[LiteralId, ...]
+    family: str | None = None
 
 
 @dataclass(frozen=True)
@@ -127,10 +134,11 @@ class Model:
         literals: Iterable[LiteralId],
         *,
         defines: str | None = None,
+        family: str | None = None,
     ) -> ConstraintId:
         """Add a constraint. `defines` marks it as that variable's whole domain."""
         index = len(self._constraints)
-        constraint = Constraint(index, name, kind, tuple(literals))
+        constraint = Constraint(index, name, kind, tuple(literals), family)
         self._constraints.append(constraint)
         for lit in constraint.literals:
             self._in_constraints[lit].append(index)
@@ -169,6 +177,10 @@ class Model:
     @property
     def variables(self) -> list[str]:
         return list(self._domain_of)
+
+    def domain_of(self, var: str) -> ConstraintId:
+        """The EXACTLY_ONE constraint listing every value `var` could take."""
+        return self._domain_of[var]
 
     def describe(self, lit: LiteralId) -> str:
         return str(self._literals[lit])
@@ -354,7 +366,8 @@ def rule_subsumption(model: Model) -> bool:
 
 
 def rule_cover(k: int) -> Callable[[Model], bool]:
-    """Subsumption over k constraints at once.
+    """Subsumption over k constraints at once: if k disjoint EXACTLY_ONE
+    constraints fit inside k others, those others are used up.
 
     Let A1..Ak be EXACTLY_ONE with pairwise disjoint live sets, and B1..Bk be
     other constraints whose live literals together contain every live literal
@@ -370,6 +383,7 @@ def rule_cover(k: int) -> Callable[[Model], bool]:
     def apply(model: Model) -> bool:
         return _CoverSearch(model, k).run()
 
+    apply.__doc__ = (rule_cover.__doc__ or "").replace(" k ", f" {k} ")
     return apply
 
 
