@@ -1,6 +1,6 @@
 # Notes for agents working on this repo
 
-Read `README.md` first for the model and how the two puzzles map onto it.
+Read `README.md` first for the model and how the puzzles map onto it.
 This file covers intent, invariants, and the things that are easy to get
 wrong.
 
@@ -122,7 +122,16 @@ Candidates, roughly in order of value:
   variables, and keeping links between runs (chains are the slow rung).
 - ~~Bounded what-if~~ — done as `rule_what_if`, using `Model.clone()`. It
   runs only `single`/`relations`/`subsumption` on the copy, never itself,
-  so it stays one level deep.
+  so it stays one level deep. Within the first variable (fewest options)
+  that has a refutable value, it keeps the refutation with the shortest
+  trail. Searching *all* variables for the globally shortest one was tried
+  and reverted: the fiendish Calcudoku went from 3 what-ifs in 0.15 s to 27
+  in 10 s.
+- **Counting constraints** (`EXACTLY_K` / `AT_MOST_K`) — the bigger
+  investment, and the one that opens the most new puzzle types (Star
+  Battle, Binairo, Tents, Minesweeper). See the README's Possible
+  improvements. Touches `Kind`, `single`, `cover`, chains' links, `proof`,
+  `story` and `report`; each must stay sound for k > 1.
 
 A new rule also needs: a case in `proof.Move` so `--explain` can replay it,
 wording in `story`, and a place in `proof.HARDEST_FIRST`.
@@ -144,11 +153,17 @@ than listing it as working.
 4. A `render(..., title, steps) -> str` function. `steps` are the deductions
    just made; show what they changed, including eliminations a person would
    mark on paper (Murdoku crosses out squares nobody can reach).
-5. Wire into `puzzlefile.detect` and `cli.load`.
+5. Wire into `puzzlefile.detect` and `KINDS`, `cli.load` and
+   `cli.write_picture`, `bruteforce.SOLVERS`, `picture.py`, and give the
+   module a line in the layering test's `ALLOWED` map (`futoshiki.py` is
+   the smallest complete example to copy).
 6. Add `bruteforce/<family>.py` with `solutions(text, limit) -> list[dict]`,
    a plain search sharing only the reader and the rule definitions. Keep the
    rule definitions (what a clue or cage *means*) in one place that both the
    compiler and the brute force call, as `murdoku.conditions` does.
+   Sudoku's `Puzzle.houses()` is the same idea for groups: Jigsaw boxes and
+   X-Sudoku diagonals are defined once and used by compiler, brute force and
+   picture alike.
 7. Test against an **independent** source of truth — a published solution,
    the brute force, or a property check (permutation, givens preserved).
    Self-consistency is not verification.
@@ -167,6 +182,9 @@ Numbers from actual runs, not estimates:
 | `sudoku_xwing.txt` | solved, 57 iterations | `single` 54, `cover2` 2 |
 | `sudoku_swordfish.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `cover3` 1 |
 | `sudoku_chains.txt` | solved, 74 iterations | `single` 55, `subsumption` 9, `chains` 6, `cover2` 3 |
+| `sudoku_x.txt` | solved, 56 iterations | `single` 55 (two solutions without its diagonals) |
+| `sudoku_jigsaw.txt` | solved, 35 iterations | `single` 30, `subsumption` 3, `cover2` 1 |
+| `futoshiki_5x5.txt` | solved, 49 iterations | `single` 25, `relations` 12, `chains` 8, `cover2` 3 |
 | `murdoku_intro.txt` | solved, 5 iterations | `single` 4 |
 | `murdoku_house.txt` | solved, 11 iterations | `single` 5, `relations` 4, `subsumption` 1 |
 | `prrrdoku1.txt` | solved, 14 iterations | `single` 7, `relations` 5, `subsumption` 1 |

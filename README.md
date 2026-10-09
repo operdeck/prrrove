@@ -3,7 +3,8 @@
 **Solves logic puzzles the way a person would, and writes down how.**
 
 One small constraint engine, several puzzle families: **Murdoku** (any size),
-**Sudoku** and **Calcudoku/KenKen**. Each puzzle is compiled down to literals
+**Sudoku** (with Jigsaw and X-Sudoku variants), **Calcudoku/KenKen** and
+**Futoshiki**. Each puzzle is compiled down to literals
 and constraints, and solved by named deduction rules — no search — so every
 step can be explained. The rules never learn which puzzle they are solving.
 
@@ -61,7 +62,7 @@ Both pictures and the solution text are generated from
 ./solve.sh examples/murdoku_intro.txt --explain         # the worked solution above
 ```
 
-## Also Sudoku and Calcudoku
+## Also Sudoku, Calcudoku and Futoshiki
 
 The same engine, with the same kind of pictures. Givens are black; what the
 solver fills in is blue.
@@ -90,7 +91,30 @@ multiplies to 12, <code>2/</code> divides to 2.</td>
 ./solve.sh examples/calcudoku_4x4_easy.txt --png calcudoku.png
 ```
 
-Sudoku is 4 × 4 or 9 × 9; Calcudoku any size.
+Two Sudoku variants and one more Latin square: a Sudoku with irregular boxes
+(Jigsaw), one whose two diagonals hold every digit once too (X-Sudoku), and
+Futoshiki, where signs between cells point at the smaller number.
+
+<table>
+<tr>
+<th>Jigsaw Sudoku</th>
+<th>X-Sudoku</th>
+<th>Futoshiki</th>
+</tr>
+<tr>
+<td><img src="docs/images/sudoku_jigsaw.png" width="230" alt="A 6 by 6 Jigsaw Sudoku"></td>
+<td><img src="docs/images/sudoku_x.png" width="230" alt="A 9 by 9 X-Sudoku"></td>
+<td><img src="docs/images/futoshiki_5x5.png" width="230" alt="A 5 by 5 Futoshiki with no givens"></td>
+</tr>
+</table>
+
+None of them needed a new rule. A Jigsaw box and an X-Sudoku diagonal are
+just more "each digit once" groups, and a Futoshiki sign is a relation
+between two cells, so it also gives `chains` its links. The Futoshiki above
+has no givens at all and needs `chains`.
+
+Sudoku is 4 × 4 or 9 × 9, Jigsaw Sudoku and Futoshiki 4 × 4 to 9 × 9,
+Calcudoku any size.
 
 ## What else it does
 
@@ -105,7 +129,7 @@ Sudoku is 4 × 4 or 9 × 9; Calcudoku any size.
 - **Grades puzzles** by the hardest rule they need (`--grade`), from
   `single` up to `chains` and `what_if`.
 - **Draws the puzzle** (`--png`): Murdoku with region colours, icons and name
-  tags; Sudoku and Calcudoku with boxes, cages and targets.
+  tags; Sudoku, Calcudoku and Futoshiki with boxes, cages, targets and signs.
 
 ```bash
 ./solve.sh examples/prrrdoku3.txt --explain        # a 9 × 9 with three cats, in Dutch
@@ -120,13 +144,13 @@ Pillow (`uv sync --extra png`).
 ## Command line
 
 `./solve.sh <puzzle file> [options]` (or `uv run csp <puzzle file> [options]`). The puzzle type is
-detected from the file; `--type sudoku|murdoku|calcudoku` overrides that.
+detected from the file; `--type sudoku|murdoku|calcudoku|futoshiki` overrides that.
 
 | Option | What it does |
 |---|---|
 | *(none)* | Solve by deduction and print the start and end boards. |
 | `--verbose`, `-v` | Narrate each deduction: the rule, what it placed or ruled out, and why. |
-| `--step`, `-s` | Narrate, redraw the board, and wait for Enter after each deduction. Murdoku crosses out squares nobody can reach and lists whose options narrowed; Calcudoku shows the numbers still possible in each cell, like pencil marks. What changed is drawn in blue. |
+| `--step`, `-s` | Narrate, redraw the board, and wait for Enter after each deduction. Murdoku crosses out squares nobody can reach and lists whose options narrowed; Calcudoku and Futoshiki show the numbers still possible in each cell, like pencil marks. What changed is drawn in blue. |
 | `--show-model` | Explain what the engine sees, then stop: variables, constraint families, how literals and constraints overlap, what the clues settled at compile time, each relation, and the rule ladder. The quickest way into the design. |
 | `--brute-force` | Find the solutions by plain search instead of deduction, then stop. Exit code 0 if there is exactly one, 1 if there are none or several (it shows two and where they differ). The check to run after transcribing a puzzle. |
 | `--explain` | Murdoku only: write out a short worked solution, as Markdown bullets, in the puzzle's language. See [Worked solutions](#worked-solutions). |
@@ -148,6 +172,9 @@ file cannot be read.
 | `sudoku_naked_pair.txt`, `sudoku_hidden_pair.txt`, `sudoku_xwing.txt` | `cover2` |
 | `sudoku_swordfish.txt` | `cover3` |
 | `sudoku_chains.txt` | `chains` |
+| `sudoku_x.txt` | `single` only, but it uses the diagonals: without them it has two solutions |
+| `sudoku_jigsaw.txt` | `cover2`: a 6×6 with irregular boxes |
+| `futoshiki_5x5.txt` | `chains`: no givens, eight signs |
 | `murdoku_intro.txt` | `single` only: the 4×4 first case above |
 | `murdoku_house.txt` | `relations`, `subsumption`: a 5×5 using "not next to" and a counting clue |
 | `prrrdoku1.txt` | `relations`, `subsumption` |
@@ -159,8 +186,9 @@ file cannot be read.
 | `calcudoku_7x7_hard.txt` | `cover3` |
 
 `prrrdoku1-3.txt` are transcribed from a set of Dutch puzzle documents (not
-in this repo), with cats among the suspects. The graded Sudokus and the
-Calcudokus are generated (newspaper puzzles are copyrighted) and picked
+in this repo), with cats among the suspects. The graded Sudokus and their
+variants, the Calcudokus and the Futoshiki are generated (newspaper puzzles
+are copyrighted) and picked
 because each needs the rule listed. Every one has exactly one solution.
 
 ## The model
@@ -187,18 +215,22 @@ square is only possible for Vladimir" says nothing at all.
 
 ## How the puzzles map
 
-| | Sudoku | Murdoku | Calcudoku |
-|---|---|---|---|
-| Variable | a cell | a **person** | a cell |
-| Literal | cell holds digit | person stands on square | cell holds number |
-| `EXACTLY_ONE` | cell holds one digit | person stands somewhere | cell holds one number |
-| | digit once per row / col / box | one person per row; one per column | number once per row / col |
-| `AT_MOST_ONE` | — | square holds at most one person | — |
-| Relations | — | position, distance and region clues; see [Puzzle files](#puzzle-files) | one per cage: its arithmetic |
+| | Sudoku | Murdoku | Calcudoku | Futoshiki |
+|---|---|---|---|---|
+| Variable | a cell | a **person** | a cell | a cell |
+| Literal | cell holds digit | person stands on square | cell holds number | cell holds number |
+| `EXACTLY_ONE` | cell holds one digit | person stands somewhere | cell holds one number | cell holds one number |
+| | digit once per row / col / box (/ diagonal) | one person per row; one per column | number once per row / col | number once per row / col |
+| `AT_MOST_ONE` | — | square holds at most one person | — | — |
+| Relations | — | position, distance and region clues; see [Puzzle files](#puzzle-files) | one per cage: its arithmetic | one per sign: smaller < larger |
 
 A Calcudoku is a Sudoku without boxes plus one relation per cage. The cage
 relation also requires distinct numbers where its cells share a row or
 column, so arc consistency rules out "3+3" inside a line without help.
+A Futoshiki is the same Latin square with one two-cell relation per sign.
+Jigsaw boxes and X-Sudoku diagonals are more `EXACTLY_ONE` families, built
+from one list of the puzzle's houses that the compiler, the brute force and
+the pictures all share.
 
 Murdoku's variables are people rather than squares because that is the shape
 of the rules: "exactly one figure per row" puts seven figures on a 7x7 board,
@@ -217,7 +249,7 @@ Applied cheapest-first; any success restarts the ladder.
 | `subsumption` | If `live(A) ⊆ live(B)` and A is `EXACTLY_ONE`, every B-literal outside A is false. |
 | `cover2`, `cover3` | The same over *k* constraints: *k* disjoint `EXACTLY_ONE`s whose live literals fit inside *k* others use those others up. |
 | `chains` | Alternating inference chains. A *strong* link joins the last two options of an `EXACTLY_ONE` (one of them holds); a *weak* link joins two options that cannot both hold (they share a constraint, or a two-variable relation forbids the pair). Assume a start option false and follow strong and weak links in turn: an option reached as true means "the start or this one" holds, so anything weakly linked to both is false. |
-| `what_if` | Assume a literal on a copy, run `single`/`relations`/`subsumption`; if that contradicts, the literal is false. |
+| `what_if` | Assume a literal on a copy, run `single`/`relations`/`subsumption`; if that contradicts, the literal is false. Of the options it can refute, it takes the one with the shortest refutation. |
 
 `single` covers Sudoku's naked single *and* hidden single with no
 special-casing — they are the same statement about different constraints
@@ -236,7 +268,10 @@ then Luna is on r8c3; so ...", with the reason for each link.
 
 `what_if` is the case split a person does when stuck ("if Tim were on r2c3,
 Jos would have nowhere to go"). It is last on the ladder and bounded: one
-assumption, cheap rules only, no nested guessing. Since `chains`, only
+assumption, cheap rules only, no nested guessing. It looks at the variable
+with the fewest options first and, of the values it can rule out there,
+keeps the one whose contradiction comes quickest, so the explanation is as
+short as it can be. Since `chains`, only
 `prrrdoku3.txt` and the fiendish Calcudoku still need it.
 
 ### Related solvers
@@ -274,7 +309,7 @@ dependency-free, but none of them written for one puzzle.
 ## Verification
 
 ```bash
-uv run pytest -q                        # 191 tests
+uv run pytest -q                        # 218 tests
 uvx ruff check src tests benchmark      # lint
 uvx ruff format --check src tests benchmark   # formatting
 uv run mypy src                         # strict type check
@@ -328,7 +363,30 @@ scratch every time the rule runs (see below).
 ## Puzzle files
 
 Sudoku is a plain 4 × 4 or 9 × 9 grid; `.`/`0` are blanks, and `|`/`-` are
-ignored.
+ignored. For the variants, put the grid under `Givens:` and add:
+
+```
+Diagonals: yes   # X-Sudoku: both main diagonals hold every digit once
+Givens:
+. . . . 3 4      # any size 4 to 9 when Boxes: is given
+...
+Boxes:           # Jigsaw: a letter per cell; N boxes of N cells each
+a a a b b b
+a c a b d b
+...
+```
+
+Futoshiki is a grid of givens and dots, then one sign per line between
+neighbouring cells (either way round):
+
+```
+Grid:
+. . . . .
+...
+Signs:
+r1c4 > r1c5
+r1c4 < r2c4
+```
 
 Calcudoku names each cage with a letter on the grid, then gives its rule:
 
@@ -433,9 +491,11 @@ Murdoku: region colours (from `Regions:`, or a default palette), a darker shade
 under objects, hatching where `Hatched:` says, thick lines between regions,
 icons for objects and furniture, name tags for people, coordinates and a
 legend. Because it is drawn from the same file the solver reads, the picture
-cannot disagree with the puzzle. Sudoku and Calcudoku pictures share the
-look: thick lines around boxes or cages, alternate boxes shaded, cages in
-pastels that never match a neighbour, each cage's target in its corner.
+cannot disagree with the puzzle. Sudoku, Calcudoku and Futoshiki pictures
+share the look: thick lines around boxes or cages, alternate boxes shaded,
+Jigsaw boxes and cages in pastels that never match a neighbour, each cage's
+target in its corner, X-Sudoku diagonals tinted, and each Futoshiki sign
+drawn as a chevron on the cell edge.
 
 Icons are referenced, not stored in the repo: `src/csp/icons.py` maps object
 names (Dutch and English, e.g. `koffer`/`suitcase`; `boom2` counts as `boom`)
@@ -453,18 +513,19 @@ and code point to `CATALOGUE`.
 src/csp/
   core.py        engine: literals, constraints, relations, rules, solver
   proof.py       a short replayable proof of a solve (any puzzle family)
-  sudoku.py      Sudoku compiler + renderer
+  sudoku.py      Sudoku compiler + renderer, including Jigsaw and X-Sudoku
   calcudoku.py   Calcudoku/KenKen compiler + renderer with pencil marks
+  futoshiki.py   Futoshiki compiler + renderer with pencil marks
   murdoku.py     Murdoku compiler + renderer + clue vocabulary and meaning
   story.py       --explain: Murdoku worked solutions, Dutch or English
   puzzlefile.py  file readers: section format, Murdoku boards, kind detection
   report.py      --show-model: a plain-text account of any compiled model
   cli.py         command line
   bruteforce/    --brute-force: plain search per puzzle family, no engine
-  picture.py     --png: pictures of all three puzzle types (Pillow)
+  picture.py     --png: pictures of every puzzle type (Pillow)
   icons.py       object name -> Noto Emoji picture, fetched and cached on use
-examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
-                 need), murdoku_*.txt, prrrdoku1-3.txt
+examples/        sudoku_*.txt, calcudoku_*.txt and futoshiki_*.txt (graded
+                 by the rule they need), murdoku_*.txt, prrrdoku1-3.txt
 benchmark/       run.py: grade and time generated Sudokus
 docs/images/     the README's pictures, drawn by --png
 tests/           test_solver.py, test_picture.py, test_story.py
@@ -503,6 +564,19 @@ several. A hand-written sentence parser is not planned.
 
 ### Possible improvements
 
+- **Counting constraints: the bigger investment, and the one that opens the
+  most new puzzles.** The engine only knows "exactly one" and "at most one".
+  Many grid puzzles count to other numbers: Star Battle (two stars per row,
+  column and region), Binairo/Takuzu (as many 0s as 1s per line), Tents,
+  Minesweeper ("three mines around this cell"), Nurikabe-style clues. A
+  general `EXACTLY_K` / `AT_MOST_K` kind, with `single` generalised (k
+  options left for k: all true; k already true: the rest false) and `cover`
+  generalised to count capacities instead of one-each, would bring those in
+  without any per-puzzle rule. Arc consistency over a relation can do it
+  today in principle, but tries every combination and does not scale to a
+  whole row. The work is in core: the new kind, its rules, chains' strong
+  and weak links for it (a count of k gives no strong links unless k options
+  remain), `proof` and the wording of `story` and `report`.
 - **Big sum cages.** A Calcudoku cage is checked by trying every
   combination of its cells' numbers, which slows down sharply for cages of
   six or seven cells. Cheaper, human-style steps would help: *bounds*
