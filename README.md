@@ -44,6 +44,7 @@ the rules run out or hit a contradiction, and 2 when the file cannot be read.
 | `sudoku_naked_pair.txt`, `sudoku_hidden_pair.txt`, `sudoku_xwing.txt` | `cover2` |
 | `sudoku_swordfish.txt` | `cover3` |
 | `sudoku_what_if.txt` | `what_if` |
+| `murdoku_intro.txt` | `single` and `subsumption`: a 4×4 first Murdoku, to show how the puzzle works |
 | `prrrdoku1.txt` | `relations`, `subsumption` |
 | `prrrdoku2.txt` | `cover2`, `cover3`, `what_if` |
 | `prrrdoku3.txt` | `what_if`, many times |

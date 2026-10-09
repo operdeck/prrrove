@@ -1,0 +1,50 @@
+# Murdoku 0 - "De eerste zaak"  (4x4, three regions)
+#
+# A first, tiny Murdoku to show how the puzzle works, made up for this repo
+# in the style of a Murdoku book's opening example (which is not copied).
+#
+# Three suspects and one victim, one per row and column. Sanne, Bram and
+# Femke each have a clue; Kees, the victim, takes the last free square. Kees
+# was alone with his murderer: the one other person in his region did it.
+#
+# Solution: Sanne r1c2, Bram r2c4, Kees r3c3, Femke r4c1, so Femke is the
+# murderer (she is the only other person in the slaapkamer).
+
+Size: 4
+Language: nl
+
+Words:
+bed: het bed
+fornuis: het fornuis
+
+Regions:
+t: tuin #CBE6B9
+k: keuken #FADFB5
+s: slaapkamer #F4CBC3
+
+Grid:
+t t k k
+t t k k
+s s s k
+s s s k
+
+Objects:
+boom: r1c1
+fornuis: r1c4
+kast: r3c1
+
+# Chairs and the bed can be sat or lain on; the bed is 1x2.
+Furniture:
+stoel: r2c4 r4c4
+bed: r4c1 r4c2
+
+People:
+Sanne
+Bram
+Femke
+Kees
+
+Clues:
+next_to Sanne boom
+on Bram stoel
+on Femke bed
