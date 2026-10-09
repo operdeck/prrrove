@@ -10,28 +10,61 @@ Requires Python 3.12+; no runtime dependencies.
 
 ```bash
 ./solve.sh examples/sudoku_easy.txt
-./solve.sh examples/prrrdoku1.txt --verbose
-./solve.sh examples/prrrdoku1.txt --step      # redraw and pause each deduction
-./solve.sh examples/calcudoku_6x6_hard.txt --step
-./solve.sh examples/prrrdoku1.txt --show-model  # explain the compiled model, don't solve
-./solve.sh examples/prrrdoku2.txt --brute-force # check uniqueness by plain search
+./solve.sh examples/prrrdoku1.txt --step
+./solve.sh examples/calcudoku_6x6_hard.txt --verbose
+./solve.sh examples/prrrdoku1.txt --show-model
+./solve.sh examples/prrrdoku2.txt --brute-force
 ```
 
-`--show-model` is the quickest way into the design: it prints what the
-engine sees for a puzzle (variables, constraint families, how literals and
-constraints overlap, what the clues settled at compile time, each relation)
-and the rule ladder that would run on it.
+## Command line
+
+`./solve.sh <puzzle file> [options]` (or `uv run csp <puzzle file> [options]`). The puzzle type is
+detected from the file; `--type sudoku|murdoku|calcudoku` overrides that.
+
+| Option | What it does |
+|---|---|
+| *(none)* | Solve by deduction and print the start and end boards. |
+| `--verbose`, `-v` | Narrate each deduction: the rule, what it placed or ruled out, and why. |
+| `--step`, `-s` | Narrate, redraw the board, and wait for Enter after each deduction. Murdoku crosses out squares nobody can reach and lists whose options narrowed; Calcudoku shows the numbers still possible in each cell, like pencil marks. What changed is drawn in blue. |
+| `--show-model` | Explain what the engine sees, then stop: variables, constraint families, how literals and constraints overlap, what the clues settled at compile time, each relation, and the rule ladder. The quickest way into the design. |
+| `--brute-force` | Find the solutions by plain search instead of deduction, then stop. Exit code 0 if there is exactly one, 1 if there are none or several (it shows two and where they differ). The check to run after transcribing a puzzle. |
+
+Without `--brute-force` the exit code is 0 when the puzzle is solved, 1 when
+the rules run out or hit a contradiction, and 2 when the file cannot be read.
+
+## Examples
+
+| File | Needs |
+|---|---|
+| `sudoku_easy.txt` | `single` only |
+| `sudoku_pointing.txt` | `subsumption` (pointing pair) |
+| `sudoku_naked_pair.txt`, `sudoku_hidden_pair.txt`, `sudoku_xwing.txt` | `cover2` |
+| `sudoku_swordfish.txt` | `cover3` |
+| `sudoku_what_if.txt` | `what_if` |
+| `prrrdoku1.txt` | `relations`, `subsumption` |
+| `prrrdoku2.txt` | `cover2`, `cover3`, `what_if` |
+| `prrrdoku3.txt` | `what_if`, many times |
+| `calcudoku_4x4_easy.txt`, `calcudoku_6x6_medium.txt` | `relations` (cage arithmetic) |
+| `calcudoku_6x6_hard.txt` | `cover2` |
+| `calcudoku_6x6_fiendish.txt` | `what_if` |
+| `calcudoku_7x7_hard.txt` | `cover3` |
+
+The Prrrdokus are transcribed from `Prrrdoku 3.docx`. The graded Sudokus and
+the Calcudokus are generated (newspaper puzzles are copyrighted) and picked
+because each needs the rule listed. Every one has exactly one solution.
 
 ## The model
 
 Three ingredients, defined in `src/csp/core.py`:
 
-- **Literals** — atomic choices. `r3c4=7` for Sudoku, `Tim=r1c1` for Murdoku.
+- **Literals** — atomic choices. `r3c4=7` for Sudoku or Calcudoku,
+  `Tim=r1c1` for Murdoku.
 - **Constraints** — a set of literals tagged `EXACTLY_ONE` or `AT_MOST_ONE`,
   optionally labelled with the *family* it belongs to ("each digit once per
   row"); the label only serves explanations.
 - **Relations** — a predicate over two or more variables' choices, for clues
-  like "Jos is somewhere left of Otto" or "Luna is furthest from Mao".
+  like "Jos is somewhere left of Otto" or "Luna is furthest from Mao", and
+  for Calcudoku cages ("these three cells add up to 12").
 
 A *variable* is just a constraint flagged as owning a whole domain, so
 `model.chosen("Tim")` can report what Tim settled on.
@@ -118,6 +151,8 @@ Correctness is checked against ground truth, not self-consistency:
   post-clue candidate lists are compared against the lists quoted in that
   document's own worked solutions. A mis-transcribed board fails the tests
   rather than quietly solving a different puzzle.
+- Calcudoku solutions are also checked as properties: every row and column
+  is a permutation, and every cage makes its target.
 
 ## Puzzle files
 
@@ -180,7 +215,7 @@ src/csp/
   core.py        engine: literals, constraints, relations, rules, solver
   sudoku.py      Sudoku compiler + renderer
   calcudoku.py   Calcudoku/KenKen compiler + renderer with pencil marks
-  murdoku.py     Murdoku compiler + renderer + clue vocabulary
+  murdoku.py     Murdoku compiler + renderer + clue vocabulary and meaning
   puzzlefile.py  file readers: section format, Murdoku boards, kind detection
   report.py      --show-model: a plain-text account of any compiled model
   cli.py         command line
