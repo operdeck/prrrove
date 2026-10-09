@@ -1,4 +1,4 @@
-"""Reader for the sectioned puzzle-file format used by Murdoku and Calcudoku.
+"""Reader for the sectioned puzzle-file format used by all but plain Sudoku.
 
 A file is a series of `Section:` headers, each followed by its lines. A
 one-line section can be written inline before the first header, as in
@@ -9,13 +9,15 @@ import re
 
 from .murdoku import Board, Clue, Square
 
-KINDS = ("sudoku", "murdoku", "calcudoku")
+KINDS = ("sudoku", "murdoku", "calcudoku", "futoshiki")
 
 
 def detect(text: str) -> str:
     """Which puzzle family a file holds, from its sections."""
     if "Cages:" in text:
         return "calcudoku"
+    if "Signs:" in text:
+        return "futoshiki"
     return "murdoku" if "Regions:" in text else "sudoku"
 
 

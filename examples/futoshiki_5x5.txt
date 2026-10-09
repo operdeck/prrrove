@@ -1,0 +1,20 @@
+# Futoshiki 5x5: no givens at all, just eight signs.
+# Each row and column holds 1-5 once; a sign points at the smaller number.
+# Generated and checked unique by brute force; needs chains.
+
+Grid:
+. . . . .
+. . . . .
+. . . . .
+. . . . .
+. . . . .
+
+Signs:
+r1c4 > r1c5
+r2c3 > r2c4
+r5c1 > r5c2
+r5c3 > r5c4
+r1c4 < r2c4
+r2c4 > r3c4
+r3c3 < r4c3
+r4c1 > r5c1

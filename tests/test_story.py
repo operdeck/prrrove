@@ -42,8 +42,9 @@ ALLOWED = {
     "murdoku": {"core"},
     "sudoku": {"core", "puzzlefile"},
     "calcudoku": {"core", "puzzlefile"},
+    "futoshiki": {"core", "puzzlefile"},
     "story": {"core", "proof", "murdoku", "puzzlefile"},
-    "picture": {"murdoku", "sudoku", "calcudoku", "icons"},
+    "picture": {"murdoku", "sudoku", "calcudoku", "futoshiki", "icons"},
 }
 
 

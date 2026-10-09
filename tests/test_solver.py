@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from csp import bruteforce, calcudoku, cli, murdoku, report, sudoku
+from csp import bruteforce, calcudoku, cli, futoshiki, murdoku, report, sudoku
 from csp.core import (
     DEFAULT_RULES,
     Contradiction,
@@ -722,6 +722,47 @@ def test_cli_detects_calcudoku():
     assert cli.main([str(EXAMPLES / "calcudoku_4x4_easy.txt")]) == 0
 
 
+# --- futoshiki ------------------------------------------------------------
+
+
+def test_futoshiki_solution_obeys_every_sign_and_needs_chains():
+    text = (EXAMPLES / "futoshiki_5x5.txt").read_text()
+    assert cli.detect(text) == "futoshiki"
+    model, puzzle = futoshiki.compile_puzzle(text)
+    assert len(model.relations) == len(puzzle.signs) == 8
+    result = Solver(model).solve()
+    assert result.solved
+    value = {
+        (r, c): result.assignment[futoshiki.cell_name((r, c))] for r in range(5) for c in range(5)
+    }
+    assert all(value[s.smaller] < value[s.larger] for s in puzzle.signs)
+    model, _ = futoshiki.compile_puzzle(text)
+    stalled = Solver(model, _before("chains")).solve()
+    assert not stalled.solved and stalled.contradiction is None
+
+
+def test_futoshiki_signs_read_either_way_round():
+    text = "Grid:\n" + ". . . .\n" * 4 + "Signs:\nr1c2 > r1c1\nr2c1 < R3C1\n"
+    puzzle = futoshiki.parse(text)
+    assert [(s.smaller, s.larger) for s in puzzle.signs] == [((0, 0), (0, 1)), ((1, 0), (2, 0))]
+    assert puzzle.sign_between == {((0, 0), (0, 1)): "<", ((1, 0), (2, 0)): "<"}
+
+
+@pytest.mark.parametrize(
+    "grid, signs, problem",
+    [
+        (". . . .\n" * 3, "", "4x4 to 9x9"),
+        (". . . .\n" * 3 + ". . . 5\n", "", "expected 1-4"),
+        (". . . .\n" * 4, "r1c1 < r2c2", "not between neighbouring"),
+        (". . . .\n" * 4, "r4c4 < r4c5", "off the grid"),
+        (". . . .\n" * 4, "r1c1 = r1c2", "bad sign"),
+    ],
+)
+def test_futoshiki_rejects_malformed_files(grid, signs, problem):
+    with pytest.raises(ValueError, match=problem):
+        futoshiki.parse(f"Grid:\n{grid}Signs:\n{signs}\n")
+
+
 # --- brute force ----------------------------------------------------------
 
 
@@ -774,6 +815,8 @@ def test_bruteforce_never_touches_the_engine():
         ("calcudoku", "Size: 2\nGrid:\na a\nb b\nCages:\na: 4+\nb: 3+\n", 0),
         ("murdoku", "Size: 2\nRegions:\na: here\nGrid:\na a\na a\nPeople:\nA\nB\n", 4),
         ("sudoku", "\n".join(["5 5 . . . . . . ."] + [". " * 9] * 8), 0),
+        ("futoshiki", "Grid:\n" + ". . . .\n" * 4 + "Signs:\n", 5),
+        ("futoshiki", "Grid:\n" + ". . . .\n" * 4 + "Signs:\nr1c1 < r1c2\nr1c2 < r1c1\n", 0),
     ],
 )
 def test_bruteforce_reports_non_unique_and_impossible_puzzles(kind, text, count):

@@ -230,6 +230,17 @@ def test_x_sudoku_picture_tints_the_diagonals():
     assert _corner(image, 0, 1) != picture.DIAGONAL
 
 
+def test_futoshiki_picture_points_each_sign_at_the_smaller_cell():
+    from csp import futoshiki
+
+    puzzle = futoshiki.parse("Grid:\n" + ". . . .\n" * 4 + "Signs:\nr1c2 < r1c1\n")
+    image = picture.futoshiki_picture(puzzle, cell=CELL)
+    edge, middle = CELL // 2 + CELL, CELL // 2 + CELL // 2
+    arm = CELL // 9
+    assert image.getpixel((edge + arm // 2, middle)) == picture.INK  # the tip, in r1c2
+    assert image.getpixel((edge - arm // 2, middle)) == picture.WHITE  # open towards r1c1
+
+
 def test_touching_calcudoku_cages_never_share_a_colour():
     from csp import calcudoku
 

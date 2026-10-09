@@ -21,6 +21,8 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont
 from . import icons
 from .calcudoku import Puzzle as Calcudoku
 from .calcudoku import cell_name as calcudoku_cell
+from .futoshiki import Puzzle as Futoshiki
+from .futoshiki import cell_name as futoshiki_cell
 from .murdoku import Board, Square
 from .sudoku import Puzzle as Sudoku
 from .sudoku import box_size
@@ -155,6 +157,38 @@ def calcudoku_picture(
         r, c = min(cage.cells)
         corner = (margin + c * cell + cell // 10, margin + r * cell + cell // 14)
         draw.text(corner, cage.label, fill=INK, font=font, anchor="la")
+    return image
+
+
+def futoshiki_picture(
+    puzzle: Futoshiki, solution: Mapping[str, int] | None = None, *, cell: int = 100
+) -> Image.Image:
+    """The grid with its givens and signs, and the solved numbers in blue if given.
+
+    Each sign is a chevron on the edge between its two cells, its point
+    towards the smaller number.
+    """
+    grid = puzzle.grid
+
+    def number(r: int, c: int) -> tuple[int | None, RGB]:
+        if grid[r][c]:
+            return grid[r][c], INK
+        return (solution or {}).get(futoshiki_cell((r, c))), SOLVED
+
+    image = _number_grid(puzzle.size, cell, lambda r, c: WHITE, number, lambda a, b: True)
+    draw = ImageDraw.Draw(image)
+    margin, arm = cell // 2, cell // 9
+    for sign in puzzle.signs:
+        (r0, c0), (r1, c1) = sign.smaller, sign.larger
+        dx, dy = c0 - c1, r0 - r1  # one step towards the smaller cell
+        mx = margin + (c0 + c1 + 1) * cell / 2
+        my = margin + (r0 + r1 + 1) * cell / 2
+        tip = (mx + dx * arm / 2, my + dy * arm / 2)
+        back = (mx - dx * arm / 2, my - dy * arm / 2)
+        ends = [(back[0] + dy * arm, back[1] + dx * arm), (back[0] - dy * arm, back[1] - dx * arm)]
+        pad = arm + cell // 25
+        draw.rectangle((mx - pad, my - pad, mx + pad, my + pad), fill=WHITE)
+        draw.line([ends[0], tip, ends[1]], fill=INK, width=max(3, cell // 25), joint="curve")
     return image
 
 
