@@ -239,8 +239,9 @@ Jos would have nowhere to go"). It is last on the ladder and bounded: one
 assumption, cheap rules only, no nested guessing. Since `chains`, only
 `prrrdoku3.txt` and the fiendish Calcudoku still need it.
 
-### Compared with a technique-by-technique solver
+### Related solvers
 
+**A technique-by-technique solver.**
 [Dedoku](https://github.com/n36l3c7/Dedoku) is a Sudoku solver with the same
 philosophy: logic only, every step named and explained. It implements 20
 technique families, each written for Sudoku's cells, rows and boxes, and it
@@ -256,6 +257,19 @@ exactly-one / at-most-one groups, many of those families are one rule here:
 | Simple colouring, X-Chain, XY-Chain, Y-Wing, W-Wing, 3D Medusa, AIC | `chains` |
 | Quads, Jellyfish, finned fish, ALS-XZ, XYZ-Wing | not yet; see [Possible improvements](#possible-improvements) |
 | Unique and Avoidable Rectangles, BUG | not planned: they assume the puzzle has exactly one solution, while every rule here must be sound for any model |
+
+**A solver with no named techniques at all.**
+[Demystify](https://github.com/stacs-cp/demystify), from the University of
+St Andrews, is generic in a different way. Puzzles are written in a
+constraint modelling language (Essence Prime), with an English description
+attached to each constraint. At every step it searches, with a SAT solver,
+for the smallest set of constraints that proves some cell value impossible
+(a *minimal unsatisfiable subset*), takes the step with the smallest such
+set, and explains it by listing those constraints. It covers many puzzle
+types (Futoshiki, Kakuro, Skyscrapers, Star Battle, Binairo and more), and
+its paper reports its steps matching published human solving guides about
+89% of the time. This engine sits in between: named rules, cheap and
+dependency-free, but none of them written for one puzzle.
 
 ## Verification
 
