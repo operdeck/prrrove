@@ -157,5 +157,85 @@ def test_cli_png_writes_board_and_solution(tmp_path, capsys):
     target = tmp_path / "board.png"
     assert cli.main([str(EXAMPLES / "prrrdoku1.txt"), "--png", str(target)]) == 0
     assert target.exists() and (tmp_path / "board-solution.png").exists()
-    assert cli.main([str(EXAMPLES / "sudoku_easy.txt"), "--png", str(target)]) == 2
-    assert "only draws Murdoku" in capsys.readouterr().err
+    for name in ("sudoku_4x4.txt", "calcudoku_4x4_easy.txt"):
+        target = tmp_path / f"{name}.png"
+        assert cli.main([str(EXAMPLES / name), "--png", str(target)]) == 0
+        assert target.exists() and target.with_stem(f"{target.stem}-solution").exists()
+
+
+# --- sudoku and calcudoku -------------------------------------------------
+
+
+def _middle(r, c):
+    margin = CELL // 2
+    return margin + c * CELL + CELL // 2, margin + r * CELL + int(CELL * 0.56)
+
+
+def _has(image, r, c, colour):
+    """Whether any pixel near the middle of cell (r, c) is close to `colour`."""
+    x, y = _middle(r, c)
+    return any(
+        sum(abs(a - b) for a, b in zip(image.getpixel((x + dx, y + dy)), colour, strict=True)) < 60
+        for dx in range(-15, 16)
+        for dy in range(-15, 16)
+    )
+
+
+def test_sudoku_picture_shows_givens_in_ink_and_solved_numbers_in_blue():
+    from csp import sudoku
+
+    text = (EXAMPLES / "sudoku_4x4.txt").read_text()
+    grid = sudoku.parse(text)
+    (solution,) = bruteforce.solutions(text)
+    image = picture.sudoku_picture(grid, solution, cell=CELL)
+    assert image.size == (5 * CELL, 5 * CELL)
+    assert _has(image, 0, 2, picture.INK) and not _has(image, 0, 2, picture.SOLVED)
+    assert _has(image, 0, 0, picture.SOLVED) and not _has(image, 0, 0, picture.INK)
+    blank = picture.sudoku_picture(grid, cell=CELL)
+    assert not _has(blank, 0, 0, picture.SOLVED)
+
+
+def test_sudoku_picture_shades_alternate_boxes():
+    from csp import sudoku
+
+    grid = sudoku.parse((EXAMPLES / "sudoku_4x4.txt").read_text())
+    image = picture.sudoku_picture(grid, cell=CELL)
+    corner = lambda r, c: image.getpixel((CELL // 2 + c * CELL + 8, CELL // 2 + r * CELL + 8))  # noqa: E731
+    assert corner(0, 0) == corner(2, 2) == picture.WHITE
+    assert corner(0, 2) == corner(2, 0) != picture.WHITE
+
+
+def test_touching_calcudoku_cages_never_share_a_colour():
+    from csp import calcudoku
+
+    for name in ("calcudoku_4x4_easy.txt", "calcudoku_7x7_hard.txt"):
+        puzzle = calcudoku.parse((EXAMPLES / name).read_text())
+        fills = picture._cage_fills(puzzle)
+        at = puzzle.cage_at
+        for (r, c), cage in at.items():
+            for nb in ((r, c + 1), (r + 1, c)):
+                if nb in at and at[nb] is not cage:
+                    assert fills[at[nb]] != fills[cage], (name, (r, c), nb)
+
+
+def test_calcudoku_picture_writes_each_cage_target_in_its_first_cell():
+    from csp import calcudoku
+
+    puzzle = calcudoku.parse((EXAMPLES / "calcudoku_4x4_easy.txt").read_text())
+    image = picture.calcudoku_picture(puzzle, cell=CELL)
+    for cage in puzzle.cages:
+        r, c = min(cage.cells)
+        x, y = CELL // 2 + c * CELL, CELL // 2 + r * CELL
+        label = image.crop((x + 8, y + 6, x + CELL // 2, y + CELL // 3))
+        assert label.convert("L").getextrema()[0] < 60, cage.label
+
+
+def test_walls_do_not_poke_into_cells():
+    """Where a cage wall ends against a thin line, no ink spills past it."""
+    from csp import calcudoku
+
+    puzzle = calcudoku.parse((EXAMPLES / "calcudoku_4x4_easy.txt").read_text())
+    image = picture.calcudoku_picture(puzzle, cell=CELL)
+    x, y = CELL // 2 + 2 * CELL, CELL // 2 + CELL  # top-left corner of r2c3
+    corner = image.crop((x - 10, y - 10, x - 3, y - 3))
+    assert corner.convert("L").getextrema()[0] > 60

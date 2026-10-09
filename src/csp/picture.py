@@ -1,10 +1,14 @@
-"""PNG pictures of Murdoku boards, drawn from the puzzle itself.
+"""PNG pictures of puzzles, drawn from the puzzle itself.
 
-The picture follows the printed Prrrdoku style: region fills (darker where an
-object stands), optional diagonal hatching, thick dark lines between regions
-and thin white lines inside them, an icon per object or piece of furniture,
-name tags for people, and a legend. Icons come from `csp.icons`; an object
-without one gets its name written in the square.
+Murdoku follows the style of the printed puzzles: region fills (darker where
+an object stands), optional diagonal hatching, thick dark lines between
+regions and thin white lines inside them, an icon per object or piece of
+furniture, name tags for people, and a legend. Icons come from `csp.icons`;
+an object without one gets its name written in the square.
+
+Sudoku and Calcudoku share the look: thick lines around boxes or cages, thin
+ones inside, givens in black and solved numbers in blue. Calcudoku cages get
+pastel fills, no two touching cages alike, and their target in the corner.
 
 Needs Pillow (`uv sync --extra png`).
 """
@@ -14,16 +18,23 @@ from collections.abc import Callable, Iterable, Mapping
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from . import icons
+from .calcudoku import Puzzle as Calcudoku
+from .calcudoku import cell_name as calcudoku_cell
 from .murdoku import Board, Square
+from .sudoku import Grid, box_size
+from .sudoku import cell_name as sudoku_cell
 
 INK = (26, 26, 26)
 WHITE = (255, 255, 255)
+SOLVED = (33, 90, 200)  # numbers the solver filled in
+THIN = (190, 190, 190)
 # Used for regions the puzzle file gives no colour.
 PALETTE = ["#F3C8C0", "#FADFB5", "#CBE6B9", "#D8D2F0", "#C4DCF2", "#BEE5D6", "#F3EDA2",
            "#DCDCDC", "#E0A79C", "#A9D6F0"]  # fmt: skip
 
 type RGB = tuple[int, int, int]
 type Box = tuple[int, int, int, int]
+type Cell = tuple[int, int]
 
 
 def murdoku_picture(
@@ -57,7 +68,13 @@ def murdoku_picture(
             fill = fills[board.region_of(sq)]
             draw.rectangle(box(sq), fill=_darker(fill) if sq in blocked else fill)
     _hatch(image, board, box, cell)
-    _grid_lines(draw, board, margin, cell)
+    _walls(
+        draw,
+        board.size,
+        margin,
+        cell,
+        lambda a, b: board.regions[a[0]][a[1]] == board.regions[b[0]][b[1]],
+    )
 
     for name, squares in board.objects.items():
         for sq in squares:
@@ -82,6 +99,100 @@ def murdoku_picture(
     if key:
         key.draw(image, draw, margin, margin + side + cell // 3)
     return image
+
+
+def sudoku_picture(
+    grid: Grid, solution: Mapping[str, int] | None = None, *, cell: int = 100
+) -> Image.Image:
+    """The grid with its givens, and the solved numbers in blue if given."""
+    n = len(grid)
+    box = box_size(n)
+
+    def shade(r: int, c: int) -> RGB:
+        return (238, 242, 250) if (r // box + c // box) % 2 else WHITE
+
+    def number(r: int, c: int) -> tuple[int | None, RGB]:
+        if grid[r][c]:
+            return grid[r][c], INK
+        return (solution or {}).get(sudoku_cell(r, c)), SOLVED
+
+    return _number_grid(n, cell, shade, number, lambda a, b: _same_box(a, b, box))
+
+
+def calcudoku_picture(
+    puzzle: Calcudoku, solution: Mapping[str, int] | None = None, *, cell: int = 100
+) -> Image.Image:
+    """The cages with their targets, and the solved numbers if given."""
+    fills = _cage_fills(puzzle)
+    cage_at = puzzle.cage_at
+
+    def number(r: int, c: int) -> tuple[int | None, RGB]:
+        return (solution or {}).get(calcudoku_cell((r, c))), SOLVED
+
+    image = _number_grid(
+        puzzle.size,
+        cell,
+        lambda r, c: fills[cage_at[r, c]],
+        number,
+        lambda a, b: cage_at[a] is cage_at[b],
+    )
+    draw = ImageDraw.Draw(image)
+    margin = cell // 2
+    font = _font(cell // 5)
+    for cage in puzzle.cages:
+        r, c = min(cage.cells)
+        corner = (margin + c * cell + cell // 10, margin + r * cell + cell // 14)
+        draw.text(corner, cage.label, fill=INK, font=font, anchor="la")
+    return image
+
+
+def _number_grid(
+    n: int,
+    cell: int,
+    shade: Callable[[int, int], RGB],
+    number: Callable[[int, int], tuple[int | None, RGB]],
+    together: Callable[[Cell, Cell], bool],
+) -> Image.Image:
+    """A square grid of numbers: shaded cells, walls between groups, coordinates."""
+    margin = cell // 2
+    side = n * cell
+    image = Image.new("RGB", (side + 2 * margin, side + 2 * margin), WHITE)
+    draw = ImageDraw.Draw(image)
+    font = _font(int(cell * 0.5))
+    for r in range(n):
+        for c in range(n):
+            x, y = margin + c * cell, margin + r * cell
+            draw.rectangle((x, y, x + cell, y + cell), fill=shade(r, c))
+    _walls(draw, n, margin, cell, together, thin_colour=THIN)
+    for r in range(n):
+        for c in range(n):
+            value, colour = number(r, c)
+            if value:
+                middle = (margin + c * cell + cell / 2, margin + r * cell + cell * 0.56)
+                draw.text(middle, str(value), fill=colour, font=font, anchor="mm")
+    _coordinates(draw, n, margin, cell)
+    return image
+
+
+def _same_box(a: Cell, b: Cell, box: int) -> bool:
+    return (a[0] // box, a[1] // box) == (b[0] // box, b[1] // box)
+
+
+def _cage_fills(puzzle: Calcudoku) -> dict[object, RGB]:
+    """A pastel per cage, never the same as a cage it touches."""
+    fills: dict[object, RGB] = {}
+    cage_at = puzzle.cage_at
+    for cage in puzzle.cages:
+        touching = {
+            id(cage_at[r + dr, c + dc])
+            for r, c in cage.cells
+            for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0))
+            if (r + dr, c + dc) in cage_at and cage_at[r + dr, c + dc] is not cage
+        }
+        taken = {fills[k] for k in fills if k in touching}
+        colours = [_rgb(p) for p in PALETTE]
+        fills[id(cage)] = next((c for c in colours if c not in taken), colours[0])
+    return {cage: fills[id(cage)] for cage in puzzle.cages}
 
 
 # --- regions --------------------------------------------------------------
@@ -133,29 +244,42 @@ def _hatch(image: Image.Image, board: Board, box: Callable[[Square], Box], cell:
     image.paste(Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB"))
 
 
-def _grid_lines(draw: ImageDraw.ImageDraw, board: Board, margin: int, cell: int) -> None:
+def _walls(
+    draw: ImageDraw.ImageDraw,
+    n: int,
+    margin: int,
+    cell: int,
+    together: Callable[[Cell, Cell], bool],
+    thin_colour: RGB = WHITE,
+) -> None:
+    """Thin lines between cells that are `together`, thick walls elsewhere."""
     thin = max(2, cell // 40)
-    thick = max(4, cell // 22)
-    n = board.size
+    thick = max(5, cell // 22) | 1  # odd, so Pillow centres both directions alike
     walls: list[tuple[int, int, int, int]] = []
     for r in range(n):
         for c in range(n):
             x, y = margin + c * cell, margin + r * cell
             if c + 1 < n:
                 line = (x + cell, y, x + cell, y + cell)
-                same = board.regions[r][c] == board.regions[r][c + 1]
-                (draw.line(line, fill=WHITE, width=thin) if same else walls.append(line))
+                same = together((r, c), (r, c + 1))
+                (draw.line(line, fill=thin_colour, width=thin) if same else walls.append(line))
             if r + 1 < n:
                 line = (x, y + cell, x + cell, y + cell)
-                same = board.regions[r][c] == board.regions[r + 1][c]
-                (draw.line(line, fill=WHITE, width=thin) if same else walls.append(line))
+                same = together((r, c), (r + 1, c))
+                (draw.line(line, fill=thin_colour, width=thin) if same else walls.append(line))
     side = n * cell
     low, high = margin, margin + side
+    horizontal_ends = {p for x0, y0, x1, y1 in walls if y0 == y1 for p in ((x0, y0), (x1, y1))}
+    vertical_ends = {p for x0, y0, x1, y1 in walls if x0 == x1 for p in ((x0, y0), (x1, y1))}
     for x0, y0, x1, y1 in walls:
-        # Extend each wall by half its width so corners meet squarely, but not past the frame.
-        dx, dy = (thick // 2, 0) if y0 == y1 else (0, thick // 2)
-        x0, x1 = max(low, x0 - dx), min(high, x1 + dx)
-        y0, y1 = max(low, y0 - dy), min(high, y1 + dy)
+        # Extend an end by half the width only where a crossing wall meets it, so
+        # corners close squarely and no wall pokes into a cell.
+        across = vertical_ends if y0 == y1 else horizontal_ends
+        grow = [thick // 2 if end in across else 0 for end in ((x0, y0), (x1, y1))]
+        if y0 == y1:
+            x0, x1 = max(low, x0 - grow[0]), min(high, x1 + grow[1])
+        else:
+            y0, y1 = max(low, y0 - grow[0]), min(high, y1 + grow[1])
         draw.line((x0, y0, x1, y1), fill=INK, width=thick)
     draw.rectangle((low, low, high, high), outline=INK, width=thick)
 

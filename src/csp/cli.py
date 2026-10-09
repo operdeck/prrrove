@@ -80,17 +80,20 @@ def brute_force(puzzle: Puzzle, text: str) -> int:
 
 
 def write_picture(kind: str, text: str, path: Path, solution: dict[str, Any] | None = None) -> bool:
-    """Save the board as a PNG, with `solution` drawn in if given."""
-    if kind != "murdoku":
-        print(f"--png only draws Murdoku boards so far, not {kind}", file=sys.stderr)
-        return False
+    """Save the puzzle as a PNG, with `solution` drawn in if given."""
     try:
         from . import picture
     except ImportError:
         print("--png needs Pillow: uv sync --extra png", file=sys.stderr)
         return False
-    board, _ = load_board(text)
-    picture.murdoku_picture(board, solution).save(path)
+    if kind == "sudoku":
+        image = picture.sudoku_picture(sudoku.parse(text), solution)
+    elif kind == "calcudoku":
+        image = picture.calcudoku_picture(calcudoku.parse(text), solution)
+    else:
+        board, _ = load_board(text)
+        image = picture.murdoku_picture(board, solution)
+    image.save(path)
     print(f"wrote {path}")
     return True
 
