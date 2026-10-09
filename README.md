@@ -49,7 +49,7 @@ the rules run out or hit a contradiction, and 2 when the file cannot be read.
 | `calcudoku_6x6_fiendish.txt` | `what_if` |
 | `calcudoku_7x7_hard.txt` | `cover3` |
 
-The Prrrdokus are transcribed from `Prrrdoku 3.docx`. The graded Sudokus and
+The Prrrdokus are transcribed from the documents in `prrrdokus/`. The graded Sudokus and
 the Calcudokus are generated (newspaper puzzles are copyrighted) and picked
 because each needs the rule listed. Every one has exactly one solution.
 
@@ -147,7 +147,7 @@ Correctness is checked against ground truth, not self-consistency:
   named pattern in the log, and must stall when the ladder is cut just
   before their rule, so each example really exercises that rung.
 - All three Prrrdokus are checked against the published solutions and the
-  puzzle's question (who is in Vladimir's region) in `Prrrdoku 3.docx`, and the
+  puzzle's question (who is in Vladimir's region) in `prrrdokus/`, and the
   post-clue candidate lists are compared against the lists quoted in that
   document's own worked solutions. A mis-transcribed board fails the tests
   rather than quietly solving a different puzzle.

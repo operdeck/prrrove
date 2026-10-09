@@ -1,7 +1,7 @@
 """Tests for the exact-cover engine and both puzzle compilers.
 
 The Murdoku cases check against the published solution and candidate lists in
-Prrrdoku 3.docx, so a wrong board transcription fails here rather than quietly
+the documents in prrrdokus/, so a wrong board transcription fails here rather than quietly
 solving some other puzzle.
 """
 

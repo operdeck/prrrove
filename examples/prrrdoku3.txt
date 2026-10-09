@@ -8,9 +8,9 @@
 # border a koffer in the koffer's own region; woonboot plus water has 19 free
 # squares.
 #
-# The original board put the koffer on r1c5 in Bankastraat. Since "next to"
-# never crosses a region boundary, that left the puzzle without a solution;
-# r1c5 now belongs to Helmholtzstraat, which restores the published solution.
+# The board first published put the koffer on r1c5 in Bankastraat. Since "next to"
+# never crosses a region boundary, that left the puzzle without a solution; the
+# document now has r1c5 in Helmholtzstraat, which keeps the published solution.
 #
 # Banks are 1x2 furniture you can lie on, so they do not block their squares.
 

@@ -119,9 +119,9 @@ Numbers from actual runs, not estimates:
 | `sudoku_xwing.txt` | solved, 57 iterations | `single` 54, `cover2` 2 |
 | `sudoku_swordfish.txt` | solved, 59 iterations | `single` 56, `cover2` 1, `cover3` 1 |
 | `sudoku_what_if.txt` | solved, 66 iterations | `single` 55, `subsumption` 6, `cover2` 2, `what_if` 2 |
-| `prrrdoku1.txt` | solved, 16 iterations | `relations` 7, `single` 7, `subsumption` 1 |
+| `prrrdoku1.txt` | solved, 14 iterations | `single` 7, `relations` 5, `subsumption` 1 |
 | `prrrdoku2.txt` | solved, 22 iterations | `relations` 9, `single` 9, `cover3` 1, `cover2` 1, `what_if` 1 |
-| `prrrdoku3.txt` | solved, 42 iterations | `relations` 16, `what_if` 12, `single` 9, `subsumption` 4 |
+| `prrrdoku3.txt` | solved, 41 iterations | `relations` 15, `single` 9, `what_if` 9, `subsumption` 7 |
 | `calcudoku_4x4_easy.txt` | solved, 22 iterations | `single` 15, `relations` 6 |
 | `calcudoku_6x6_medium.txt` | solved, 57 iterations | `single` 35, `relations` 21 |
 | `calcudoku_6x6_hard.txt` | solved, 60 iterations | `single` 36, `relations` 20, `cover2` 3 |
@@ -145,19 +145,22 @@ and 9". The document then splits on Otto's square; `what_if` instead rules
 out Tim on r2c3 (Jos is left with nowhere to go). Different route, same
 answer.
 
-Prrrdoku 3 leans on `what_if` hardest (12 firings). The document's own
-solution has a matching step, "werk die door en er valt een rij domino's
-om" - a chain of consequences rather than a single named pattern. Chains
-would explain that more like a person does.
+Prrrdoku 3 leans on `what_if` hardest (9 firings). The document's own
+solution argues by cases there too ("Waar zit Anna?") rather than with a
+single named pattern. Chains would explain that more like a person does.
 
 ## Known gaps
 
-- Prrrdoku boards are **images** in `Prrrdoku 3.docx` (the current version;
-  the older `Prrrdoku.docx` has a different puzzle 3 and calls Mao "Mauw").
-  Extract from `word/media/*.png` and read them; the tables in that file are
-  colour legends, useful for matching colours to region names (read
+- The Prrrdoku documents are in `prrrdokus/`, one per puzzle. Their boards
+  are **images**: extract from `word/media/*.png` and read them; the tables
+  are colour legends, useful for matching colours to region names (read
   `w:fill`). Always cross-check a transcription against the candidate lists
-  in the document's worked solution before trusting it.
+  in the document's worked solution, and run `--brute-force` on it.
+- Puzzle 3 as first published had no solution once "next to" stays within a
+  region: the koffer on r1c5 sat in Bankastraat. Its board, solution picture
+  and worked solution were corrected (r1c5 now in Helmholtzstraat); puzzle
+  1's worked solution listed a cross-region square for Tjitske and was
+  corrected too. The answers did not change.
 - "Only Luna may stand in the water" is a board rule, written out as one
   `outside` clue per other person in `prrrdoku3.txt`.
 - `relations` re-scans every relation from scratch on each pass (it prunes
