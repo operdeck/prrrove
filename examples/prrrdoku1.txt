@@ -7,6 +7,15 @@
 # moestuin minus kas is exactly the six Pip squares.
 
 Size: 7
+Language: nl
+
+# How to write names in the explanation: a place as "where", a thing as a noun.
+Words:
+klimgebied: in het klimgebied
+kampeerplek: op de kampeerplek
+cafe: in het café
+vuurtje: het vuurtje
+kookeiland: het kookeiland
 
 Regions:
 a: klimgebied #F3C8C0

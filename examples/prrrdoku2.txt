@@ -7,6 +7,15 @@
 # r8c3, r8c5, r9c4; r4c7 is the only keukenwinkel square below row 3.
 
 Size: 9
+Language: nl
+
+# How to write names in the explanation: a place as "where", a thing as a noun.
+Words:
+klimgebied: in het klimgebied
+kampeerplek: op de kampeerplek
+cafe: in het café
+vuurtje: het vuurtje
+kookeiland: het kookeiland
 
 Regions:
 a: klimgebied #F3C8C0

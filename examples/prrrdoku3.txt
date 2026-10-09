@@ -15,6 +15,20 @@
 # Banks are 1x2 furniture you can lie on, so they do not block their squares.
 
 Size: 9
+Language: nl
+
+# How to write names in the explanation: a place as "where", a thing as a noun.
+Words:
+klimgebied_noord: in klimgebied noord
+klimgebied_zuid: in klimgebied zuid
+klimgebied: in een klimgebied
+helmholtzstraat: in de Helmholtzstraat
+bankastraat: in de Bankastraat
+kantoor: op kantoor
+woonboot: op de woonboot
+water: in het water
+vuurtje: het vuurtje
+bureau: het bureau
 
 Regions:
 a: klimgebied_noord #F4CBC3
@@ -71,8 +85,7 @@ Mao
 Luna
 
 # "In het water kan alleen Luna zijn" is a board rule, written out per person.
-# Clue 14 is the question being asked.
-Clues:
+Rules:
 outside Tim water
 outside Jos water
 outside Otto water
@@ -81,6 +94,9 @@ outside Pip water
 outside Tjitske water
 outside Vladimir water
 outside Mao water
+
+# Clues 1-13 from the document. Clue 14 is the question being asked.
+Clues:
 knight_from Tim klimwand boulder
 in_region Otto klimgebied kantoor
 on Jos bank

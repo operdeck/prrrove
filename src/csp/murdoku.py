@@ -65,6 +65,10 @@ class Board:
     `furniture` (such as a bank to lie on) does not. Several things may share
     a name, like three suitcases. `colours` (region id -> '#RRGGBB') and
     `hatched` (region ids) only affect pictures.
+
+    `rules` are clues that come with the board rather than the puzzle, such
+    as "only Luna can be in the water"; they are not numbered. `language`
+    and `words` (name -> how to say it) only affect written explanations.
     """
 
     size: int
@@ -76,6 +80,9 @@ class Board:
     furniture: dict[str, list[Square]] = field(default_factory=dict)
     colours: dict[str, str] = field(default_factory=dict)
     hatched: set[str] = field(default_factory=set)
+    rules: list["Clue"] = field(default_factory=list)
+    language: str = "en"
+    words: dict[str, str] = field(default_factory=dict)
     free: list[Square] = field(init=False)
     borders: set[frozenset[str]] = field(init=False)
 
@@ -236,23 +243,29 @@ class Condition:
 
     This is the puzzle's meaning, independent of how it is solved: the
     compiler turns it into the model, the brute-force checker tests it
-    directly.
+    directly. `kind` and `args` are the clue it came from, `number` its
+    place in the clue list (None for a board rule).
     """
 
     label: str
     people: tuple[str, ...]
     test: Callable[..., bool]
+    kind: str = ""
+    args: tuple[str, ...] = ()
+    number: int | None = None
 
 
 def conditions(board: Board, clues: Iterable[Clue]) -> list[Condition]:
-    """Every clue as conditions on one, two or three people."""
+    """The board's rules and every clue, as conditions on one, two or three people."""
     out: list[Condition] = []
-    for kind, args in clues:
-        out += _conditions(board, kind, args)
+    for kind, args in board.rules:
+        out += _conditions(board, kind, args, None)
+    for number, (kind, args) in enumerate(clues, 1):
+        out += _conditions(board, kind, args, number)
     return out
 
 
-def _conditions(board: Board, kind: str, args: list[str]) -> list[Condition]:
+def _conditions(board: Board, kind: str, args: list[str], number: int | None) -> list[Condition]:
     arity = 1 if kind in FILTERS else 2 if kind in RELATIONS else GROUP_CLUES.get(kind)
     if arity is None:
         raise ValueError(f"unknown clue {kind!r}")
@@ -260,22 +273,25 @@ def _conditions(board: Board, kind: str, args: list[str]) -> list[Condition]:
         if who not in board.people:
             raise ValueError(f"clue {kind} {' '.join(args)} names unknown person {who!r}")
 
+    def made(label: str, people: tuple[str, ...], test: Callable[..., bool]) -> Condition:
+        return Condition(label, people, test, kind, tuple(args), number)
+
     if kind in FILTERS:
         person, *rest = args
-        return [Condition(" ".join([kind, *args]), (person,), FILTERS[kind](board, *rest))]
+        return [made(" ".join([kind, *args]), (person,), FILTERS[kind](board, *rest))]
     if kind in RELATIONS:
         a, b, *rest = args
-        return [Condition(" ".join([a, kind, b, *rest]), (a, b), RELATIONS[kind](board, *rest))]
+        return [made(" ".join([a, kind, b, *rest]), (a, b), RELATIONS[kind](board, *rest))]
     if kind == "alone":
         (a,) = args
         return [
-            Condition(f"{a} alone in region, so not with {p}", (a, p), _different_region(board))
+            made(f"{a} alone in region, so not with {p}", (a, p), _different_region(board))
             for p in board.people
             if p != a
         ]
     a, b = args
     return [
-        Condition(f"{a} further from {b} than {p}", (a, b, p), _further)
+        made(f"{a} further from {b} than {p}", (a, b, p), _further)
         for p in board.people
         if p not in (a, b)
     ]
@@ -298,7 +314,12 @@ def compile_puzzle(board: Board, clues: Iterable[Clue]) -> Model:
             (person,) = condition.people
             for sq in board.free:
                 if not condition.test(sq):
-                    model.eliminate(model.literal(person, sq), "clue", condition.label)
+                    model.eliminate(
+                        model.literal(person, sq),
+                        "clue",
+                        condition.label,
+                        sources=(condition.label,),
+                    )
         else:
             model.relate(condition.label, condition.people, condition.test)
     return model

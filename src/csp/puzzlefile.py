@@ -86,17 +86,29 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
         name, _, members = line.partition(":")
         groups[name.strip()] = members.split()
 
-    clues: list[Clue] = []
-    for line in section.get("Clues", []):
-        kind, *args = line.split()
-        clues.append((kind, args))
+    clues = _clues(section.get("Clues", []))
+
+    words = {}
+    for line in section.get("Words", []):
+        name, _, phrase = line.partition(":")
+        if not phrase.strip():
+            raise ValueError(f"Words: {line!r} is not like 'vuurtje: het vuurtje'")
+        words[name.strip()] = phrase.strip()
 
     board = Board(size, grid, region_names, objects, people, groups, furniture, colours)
     board.region_ids(groups)  # fails now, not mid-solve, if a group names an unknown region
     board.hatched = board.region_ids(
         name for line in section.get("Hatched", []) for name in line.split()
     )
+    board.rules = _clues(section.get("Rules", []))
+    board.language = section.get("Language", ["en"])[0]
+    board.words = words
     return board, clues
+
+
+def _clues(lines: list[str]) -> list[Clue]:
+    """'next_to Tim klimwand' lines -> [('next_to', ['Tim', 'klimwand'])]."""
+    return [(kind, args) for kind, *args in (line.split() for line in lines)]
 
 
 def _placements(lines: list[str]) -> dict[str, list[Square]]:
