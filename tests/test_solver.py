@@ -180,7 +180,8 @@ def test_sudoku_model_shape():
 
 
 def test_sudoku_solves_to_a_valid_grid():
-    model, grid = sudoku.compile_puzzle((EXAMPLES / "sudoku_easy.txt").read_text())
+    model, puzzle = sudoku.compile_puzzle((EXAMPLES / "sudoku_easy.txt").read_text())
+    grid = puzzle.grid
     result = Solver(model).solve()
     assert result.solved
 
@@ -241,11 +242,48 @@ def test_sudoku_rejects_a_malformed_grid():
 
 
 def test_mini_sudoku_has_two_by_two_boxes():
-    model, grid = sudoku.compile_puzzle((EXAMPLES / "sudoku_4x4.txt").read_text())
+    model, puzzle = sudoku.compile_puzzle((EXAMPLES / "sudoku_4x4.txt").read_text())
+    grid = puzzle.grid
     boxes = [c for c in model.constraints if c.family == "each digit once per box"]
     assert len(grid) == 4 and len(boxes) == 4 * 4
     assert all(len(c.literals) == 4 for c in boxes)
     assert Solver(model).solve().solved
+
+
+def test_jigsaw_boxes_and_x_diagonals_are_houses():
+    jigsaw = sudoku.parse((EXAMPLES / "sudoku_jigsaw.txt").read_text())
+    assert jigsaw.size == 6 and jigsaw.jigsaw and not jigsaw.diagonals
+    boxes = [cells for family, _, cells in jigsaw.houses() if family == "box"]
+    assert len(boxes) == 6 and all(len(cells) == 6 for cells in boxes)
+    x = sudoku.parse((EXAMPLES / "sudoku_x.txt").read_text())
+    diagonals = [cells for family, _, cells in x.houses() if family == "diagonal"]
+    assert not x.jigsaw and diagonals == [
+        [(i, i) for i in range(9)],
+        [(i, 8 - i) for i in range(9)],
+    ]
+
+
+def test_x_sudoku_is_unique_only_because_of_its_diagonals():
+    text = (EXAMPLES / "sudoku_x.txt").read_text()
+    assert len(bruteforce.solutions(text)) == 1
+    plain = text.replace("Diagonals: yes", "Diagonals: no")
+    assert len(bruteforce.solutions(plain)) == 2
+    model, _ = sudoku.compile_puzzle(text)
+    Solver(model).solve()
+    assert any("diagonal" in s.reason for s in model.log)
+
+
+@pytest.mark.parametrize(
+    "boxes, problem",
+    [
+        ("a a b b\na a b b\nc c d d\nc c d", "not 4x4"),
+        ("a a a b\na a b b\nc c d d\nc c d d", "4 boxes of 4 cells"),
+    ],
+)
+def test_jigsaw_boxes_must_tile_the_grid(boxes, problem):
+    text = "Givens:\n" + ". . . .\n" * 4 + "Boxes:\n" + boxes + "\n"
+    with pytest.raises(ValueError, match=problem):
+        sudoku.parse(text)
 
 
 # --- murdoku --------------------------------------------------------------

@@ -30,11 +30,11 @@ class Puzzle:
 def load(text: str, kind: str) -> Puzzle:
     """Compile puzzle text of the given kind. Raises ValueError if malformed."""
     if kind == "sudoku":
-        model, _ = sudoku.compile_puzzle(text)
-        return Puzzle(kind, model, sudoku.render)
+        model, layout = sudoku.compile_puzzle(text)
+        return Puzzle(kind, model, partial(sudoku.render, layout))
     if kind == "calcudoku":
-        model, grid = calcudoku.compile_puzzle(text)
-        return Puzzle(kind, model, partial(calcudoku.render, grid))
+        model, cages = calcudoku.compile_puzzle(text)
+        return Puzzle(kind, model, partial(calcudoku.render, cages))
     board, clues = load_board(text)
     model = murdoku.compile_puzzle(board, clues)
     return Puzzle(kind, model, partial(murdoku.render, board))

@@ -40,7 +40,7 @@ ALLOWED = {
     "core": set(),
     "proof": {"core"},
     "murdoku": {"core"},
-    "sudoku": {"core"},
+    "sudoku": {"core", "puzzlefile"},
     "calcudoku": {"core", "puzzlefile"},
     "story": {"core", "proof", "murdoku", "puzzlefile"},
     "picture": {"murdoku", "sudoku", "calcudoku", "icons"},

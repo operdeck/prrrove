@@ -13,7 +13,8 @@ pastel fills, no two touching cages alike, and their target in the corner.
 Needs Pillow (`uv sync --extra png`).
 """
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Hashable, Iterable, Mapping
+from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 
@@ -21,12 +22,14 @@ from . import icons
 from .calcudoku import Puzzle as Calcudoku
 from .calcudoku import cell_name as calcudoku_cell
 from .murdoku import Board, Square
-from .sudoku import Grid, box_size
+from .sudoku import Puzzle as Sudoku
+from .sudoku import box_size
 from .sudoku import cell_name as sudoku_cell
 
 INK = (26, 26, 26)
 WHITE = (255, 255, 255)
 SOLVED = (33, 90, 200)  # numbers the solver filled in
+DIAGONAL = (255, 241, 196)  # X-Sudoku's diagonal houses
 THIN = (190, 190, 190)
 # Used for regions the puzzle file gives no colour.
 PALETTE = ["#F3C8C0", "#FADFB5", "#CBE6B9", "#D8D2F0", "#C4DCF2", "#BEE5D6", "#F3EDA2",
@@ -102,13 +105,22 @@ def murdoku_picture(
 
 
 def sudoku_picture(
-    grid: Grid, solution: Mapping[str, int] | None = None, *, cell: int = 100
+    puzzle: Sudoku, solution: Mapping[str, int] | None = None, *, cell: int = 100
 ) -> Image.Image:
-    """The grid with its givens, and the solved numbers in blue if given."""
-    n = len(grid)
+    """The grid with its givens, and the solved numbers in blue if given.
+
+    Square boxes are shaded alternately; jigsaw boxes get a pastel each. In
+    X-Sudoku the two diagonals are tinted.
+    """
+    n, grid, boxes = puzzle.size, puzzle.grid, puzzle.boxes
+    fills = _group_fills({(r, c): boxes[r][c] for r in range(n) for c in range(n)})
     box = box_size(n)
 
     def shade(r: int, c: int) -> RGB:
+        if puzzle.diagonals and (r == c or r + c == n - 1):
+            return DIAGONAL
+        if puzzle.jigsaw:
+            return fills[boxes[r][c]]
         return (238, 242, 250) if (r // box + c // box) % 2 else WHITE
 
     def number(r: int, c: int) -> tuple[int | None, RGB]:
@@ -116,7 +128,7 @@ def sudoku_picture(
             return grid[r][c], INK
         return (solution or {}).get(sudoku_cell(r, c)), SOLVED
 
-    return _number_grid(n, cell, shade, number, lambda a, b: _same_box(a, b, box))
+    return _number_grid(n, cell, shade, number, lambda a, b: boxes[a[0]][a[1]] == boxes[b[0]][b[1]])
 
 
 def calcudoku_picture(
@@ -174,25 +186,27 @@ def _number_grid(
     return image
 
 
-def _same_box(a: Cell, b: Cell, box: int) -> bool:
-    return (a[0] // box, a[1] // box) == (b[0] // box, b[1] // box)
-
-
 def _cage_fills(puzzle: Calcudoku) -> dict[object, RGB]:
     """A pastel per cage, never the same as a cage it touches."""
-    fills: dict[object, RGB] = {}
-    cage_at = puzzle.cage_at
-    for cage in puzzle.cages:
+    return _group_fills(dict(puzzle.cage_at))
+
+
+def _group_fills(group_at: Mapping[Cell, Hashable]) -> dict[Any, RGB]:
+    """A pastel per group of cells, never the same as a group it touches."""
+    colours = [_rgb(p) for p in PALETTE]
+    fills: dict[Any, RGB] = {}
+    for _, group in sorted(group_at.items()):
+        if group in fills:
+            continue
         touching = {
-            id(cage_at[r + dr, c + dc])
-            for r, c in cage.cells
-            for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0))
-            if (r + dr, c + dc) in cage_at and cage_at[r + dr, c + dc] is not cage
+            fills.get(group_at[nb])
+            for (gr, gc), g in group_at.items()
+            if g == group
+            for nb in ((gr, gc + 1), (gr + 1, gc), (gr, gc - 1), (gr - 1, gc))
+            if nb in group_at and group_at[nb] != group
         }
-        taken = {fills[k] for k in fills if k in touching}
-        colours = [_rgb(p) for p in PALETTE]
-        fills[id(cage)] = next((c for c in colours if c not in taken), colours[0])
-    return {cage: fills[id(cage)] for cage in puzzle.cages}
+        fills[group] = next((x for x in colours if x not in touching), colours[0])
+    return fills
 
 
 # --- regions --------------------------------------------------------------

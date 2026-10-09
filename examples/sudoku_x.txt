@@ -1,0 +1,14 @@
+# X-Sudoku: a Sudoku whose two main diagonals also hold 1-9 once.
+# Generated; without the diagonals it would have more than one solution.
+Diagonals: yes
+
+Givens:
+. . 9 4 . 7 . . .
+2 . 6 1 . . . . 4
+. . 5 6 3 . . . .
+. . . . . . 7 . 8
+. . . . 4 . . . .
+9 . . . . 8 . . .
+8 . . 2 . . . . .
+. 6 . . . 4 . 2 9
+. . . 8 5 6 1 . 3

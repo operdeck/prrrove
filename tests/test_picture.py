@@ -205,6 +205,31 @@ def test_sudoku_picture_shades_alternate_boxes():
     assert corner(0, 2) == corner(2, 0) != picture.WHITE
 
 
+def _corner(image, r, c):
+    return image.getpixel((CELL // 2 + c * CELL + 8, CELL // 2 + r * CELL + 8))
+
+
+def test_jigsaw_picture_colours_touching_boxes_apart():
+    from csp import sudoku
+
+    puzzle = sudoku.parse((EXAMPLES / "sudoku_jigsaw.txt").read_text())
+    image = picture.sudoku_picture(puzzle, cell=CELL)
+    boxes = puzzle.boxes
+    for r in range(6):
+        for c in range(5):
+            same = boxes[r][c] == boxes[r][c + 1]
+            assert (_corner(image, r, c) == _corner(image, r, c + 1)) == same, (r, c)
+
+
+def test_x_sudoku_picture_tints_the_diagonals():
+    from csp import sudoku
+
+    puzzle = sudoku.parse((EXAMPLES / "sudoku_x.txt").read_text())
+    image = picture.sudoku_picture(puzzle, cell=CELL)
+    assert _corner(image, 0, 0) == _corner(image, 0, 8) == _corner(image, 4, 4) == picture.DIAGONAL
+    assert _corner(image, 0, 1) != picture.DIAGONAL
+
+
 def test_touching_calcudoku_cages_never_share_a_colour():
     from csp import calcudoku
 
