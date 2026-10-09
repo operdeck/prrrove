@@ -1,21 +1,86 @@
-# Exact-cover puzzle solver
+# prrrove
 
-One constraint engine, several puzzles. Each puzzle family is compiled down to
-literals and constraints; the solving rules never learn anything about the
-puzzle they are solving.
+**Solves logic puzzles the way a person would, and writes down how.**
 
-Currently solved: **Sudoku** (9x9), **Murdoku/Prrrdoku** (any size) and
-**Calcudoku/KenKen** (any size).
-Requires Python 3.12+. The solver has no runtime dependencies; `--png` needs
-Pillow (`uv sync --extra png`).
+One small constraint engine, several puzzle families: **Murdoku** (any size),
+**Sudoku** and **Calcudoku/KenKen**. Each puzzle is compiled down to literals
+and constraints, and solved by named deduction rules — no search — so every
+step can be explained. The rules never learn which puzzle they are solving.
+
+## A first case
+
+Four people on a 4 × 4 floor plan with three rooms. Everyone stands in a
+different row and a different column. Trees, bushes, tables and cabinets
+block their square; chairs and the bed can be sat or lain on. "Next to"
+means directly above, below, left or right, *in the same room*.
+
+<table>
+<tr>
+<td><img src="docs/images/murdoku_intro.png" width="300" alt="The board: patio, guest room and sitting room"></td>
+<td>
+
+**Clues**
+
+1. Ingrid is on a chair.
+2. Joost is next to the tree.
+3. Lotte is on the bed.
+
+**Wouter**, the victim, is in the last free square.
+He was alone with his murderer.
+
+### Who did it?
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>Show the solution</b>, as written by <code>--explain</code></summary>
+
+<br>
+
+- **The direct clues.** Ingrid is on a chair (1): r3c1, r3c4 or r4c3. Joost
+  is next to the tree (2): r1c1. Lotte is on the bed (3): r4c1 or r4c2.
+- **The rest.** **Joost on r1c1**. Joost takes column 1, so **Lotte on
+  r4c2**. Lotte takes row 4 and Joost takes column 1, so **Ingrid on r3c4**.
+  Only r2c3 is left for Wouter: **Wouter on r2c3**.
+
+<img src="docs/images/murdoku_intro-solution.png" width="300" alt="The solution">
+
+Wouter is in the sitting room, and the only other person there is
+**Ingrid**. She did it.
+
+</details>
+
+Both pictures and the solution text are generated from
+[`examples/murdoku_intro.txt`](examples/murdoku_intro.txt):
 
 ```bash
-./solve.sh examples/sudoku_easy.txt
-./solve.sh examples/prrrdoku1.txt --step
-./solve.sh examples/calcudoku_6x6_hard.txt --verbose
-./solve.sh examples/prrrdoku1.txt --show-model
-./solve.sh examples/prrrdoku2.txt --brute-force
+./solve.sh examples/murdoku_intro.txt --png board.png   # board.png, board-solution.png
+./solve.sh examples/murdoku_intro.txt --explain         # the worked solution above
 ```
+
+## What else it does
+
+- **Explains itself.** `--explain` writes a short worked solution, in English
+  or Dutch, citing clues by number and describing where people can be by
+  room, row or column rather than listing squares. `--step` redraws the board
+  after every deduction; `--show-model` shows what the engine sees.
+- **Checks itself.** `--brute-force` solves by plain search, sharing nothing
+  with the engine, to confirm a puzzle has exactly one solution. Every
+  example is checked this way, and every placement `--explain` states is
+  checked against it.
+- **Draws the board** (`--png`) with region colours, icons and name tags.
+
+```bash
+./solve.sh examples/prrrdoku3.txt --explain        # a 9 × 9 with three cats, in Dutch
+./solve.sh examples/prrrdoku1.txt --step           # watch it deduce, step by step
+./solve.sh examples/sudoku_swordfish.txt --verbose
+./solve.sh examples/calcudoku_6x6_hard.txt --show-model
+```
+
+Requires Python 3.12+. The solver has no runtime dependencies; `--png` needs
+Pillow (`uv sync --extra png`).
 
 ## Command line
 
@@ -44,7 +109,7 @@ the rules run out or hit a contradiction, and 2 when the file cannot be read.
 | `sudoku_naked_pair.txt`, `sudoku_hidden_pair.txt`, `sudoku_xwing.txt` | `cover2` |
 | `sudoku_swordfish.txt` | `cover3` |
 | `sudoku_what_if.txt` | `what_if` |
-| `murdoku_intro.txt` | `single` only: a 4×4 first Murdoku, to show how the puzzle works |
+| `murdoku_intro.txt` | `single` only: the 4×4 first case above |
 | `prrrdoku1.txt` | `relations`, `subsumption` |
 | `prrrdoku2.txt` | `cover2`, `cover3`, `what_if` |
 | `prrrdoku3.txt` | `what_if`, many times |
@@ -53,8 +118,9 @@ the rules run out or hit a contradiction, and 2 when the file cannot be read.
 | `calcudoku_6x6_fiendish.txt` | `what_if` |
 | `calcudoku_7x7_hard.txt` | `cover3` |
 
-The Prrrdokus are transcribed from the documents in `prrrdokus/`. The graded Sudokus and
-the Calcudokus are generated (newspaper puzzles are copyrighted) and picked
+`prrrdoku1-3.txt` are transcribed from a set of Dutch puzzle documents (not
+in this repo), with cats among the suspects. The graded Sudokus and the
+Calcudokus are generated (newspaper puzzles are copyrighted) and picked
 because each needs the rule listed. Every one has exactly one solution.
 
 ## The model
@@ -150,11 +216,11 @@ Correctness is checked against ground truth, not self-consistency:
   `_xwing`, `_swordfish`, `_what_if`) and Calcudokus must also show their
   named pattern in the log, and must stall when the ladder is cut just
   before their rule, so each example really exercises that rung.
-- All three Prrrdokus are checked against the published solutions and the
-  puzzle's question (who is in Vladimir's region) in `prrrdokus/`, and the
-  post-clue candidate lists are compared against the lists quoted in that
-  document's own worked solutions. A mis-transcribed board fails the tests
-  rather than quietly solving a different puzzle.
+- `prrrdoku1-3.txt` are checked against the published solutions and the
+  puzzle's question (who is in Vladimir's region) in their source documents,
+  and the post-clue candidate lists are compared against the lists quoted in
+  each document's own worked solution. A mis-transcribed board fails the
+  tests rather than quietly solving a different puzzle.
 - Calcudoku solutions are also checked as properties: every row and column
   is a permutation, and every cage makes its target.
 
@@ -250,8 +316,8 @@ It is built in three layers that never reach into each other:
 
 ### Pictures
 
-`--png` draws a Murdoku board from the puzzle file in the printed Prrrdoku
-style: region colours (from `Regions:`, or a default palette), a darker shade
+`--png` draws a Murdoku board from the puzzle file in the style of a printed
+Murdoku: region colours (from `Regions:`, or a default palette), a darker shade
 under objects, hatching where `Hatched:` says, thick lines between regions,
 icons for objects and furniture, name tags for people, coordinates and a
 legend. Because it is drawn from the same file the solver reads, the picture
@@ -284,13 +350,14 @@ src/csp/
   picture.py     --png: Murdoku board pictures (Pillow)
   icons.py       object name -> Noto Emoji picture, fetched and cached on use
 examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
-                 need), prrrdoku1-3.txt
+                 need), murdoku_intro.txt, prrrdoku1-3.txt
+docs/images/     the README's pictures, drawn by --png
 tests/           test_solver.py, test_picture.py, test_story.py
 ```
 
 ## TODO
 
-**Generate the whole Prrrdoku document** from its puzzle file, not just the
+**Generate the whole puzzle document** from its puzzle file, not just the
 pictures (`--png`) and the worked solution (`--explain`). Not done on
 purpose for now: the hand-written clue wording ("Jos doet een dutje op een
 bank", "nog steeds") has charm the templates lack. If it is ever wanted:
@@ -308,5 +375,5 @@ bank", "nog steeds") has charm the templates lack. If it is ever wanted:
   and the layering test gets a line for it. Use `python-docx` as an optional
   extra (like Pillow), starting from one of the current documents as the
   style template.
-- **Test** by generating all three and comparing their text with
-  `prrrdokus/` (worked solutions aside).
+- **Test** by generating all three and comparing their text with the
+  local source documents (worked solutions aside).
