@@ -42,6 +42,16 @@ tests use the public `Model` API (`literal`, `constrain`, `relate`, the
 inspection methods, `assign`/`eliminate`). Renderers learn what changed from
 `Step.var`/`Step.value`, never by parsing strings.
 
+**Solving, explaining and drawing are separate layers.** `core` records
+*why* each step happened as structure on `Step` (`sources`, `scope`,
+`placing`, `trail`), never as wording. `proof` shortens a solve using only
+that and the public API. `murdoku` owns the board and what clues mean, and
+`board_rules()` is the structured meaning of its constraints — look names
+up there, never parse them. Wording (`Language:`, `Words:`, phrasebooks)
+lives only in `story`; pictures only in `picture`. Explanation concerns
+never go on `Board` or into `core`. `test_modules_only_import_their_own_layer`
+enforces the import graph.
+
 ## Interfaces
 
 | Boundary | Contract |
@@ -52,6 +62,8 @@ inspection methods, `assign`/`eliminate`). Renderers learn what changed from
 | progress | `on_step(rule_name, steps)` after each rule that fires |
 | CLI -> puzzle | `cli.load(text, kind) -> Puzzle(kind, model, draw)` |
 | explanation | `report.describe(model, rules) -> str`, public `Model` API only |
+| proof | `Move.of(rule, steps)`, `shortest(start, moves)`, `replay(start, moves, on_step)`, `essential(model, history, step)` |
+| worked solution | `story.explain(text) -> str`; Murdoku only, reads `proof` and `murdoku` |
 | brute force | `bruteforce.solutions(text, kind, limit) -> list[dict]`; never imports `core` |
 
 Label every constraint with `family=` when compiling a new puzzle type;
@@ -162,7 +174,12 @@ single named pattern. Chains would explain that more like a person does.
   1's worked solution listed a cross-region square for Tjitske and was
   corrected too. The answers did not change.
 - "Only Luna may stand in the water" is a board rule, written out as one
-  `outside` clue per other person in `prrrdoku3.txt`.
+  `outside` line per other person in the `Rules:` section of
+  `prrrdoku3.txt`, so clue numbers still match the document.
+- `--explain` follows the solver's own route, shortened. Where the solver
+  needs `what_if` (Prrrdoku 3), the story says "X kan niet op ...: dan ..."
+  rather than the document's more insightful case splits. Chains would
+  help here too.
 - `relations` re-scans every relation from scratch on each pass (it prunes
   a whole relation per firing, so there are few passes). Three-way
   relations (`furthest`) make each scan quadratic in domain size. A

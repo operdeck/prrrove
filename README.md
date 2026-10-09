@@ -29,6 +29,7 @@ detected from the file; `--type sudoku|murdoku|calcudoku` overrides that.
 | `--step`, `-s` | Narrate, redraw the board, and wait for Enter after each deduction. Murdoku crosses out squares nobody can reach and lists whose options narrowed; Calcudoku shows the numbers still possible in each cell, like pencil marks. What changed is drawn in blue. |
 | `--show-model` | Explain what the engine sees, then stop: variables, constraint families, how literals and constraints overlap, what the clues settled at compile time, each relation, and the rule ladder. The quickest way into the design. |
 | `--brute-force` | Find the solutions by plain search instead of deduction, then stop. Exit code 0 if there is exactly one, 1 if there are none or several (it shows two and where they differ). The check to run after transcribing a puzzle. |
+| `--explain` | Murdoku only: write out a short worked solution, as Markdown bullets, in the puzzle's language. See [Worked solutions](#worked-solutions). |
 | `--png FILE` | Murdoku only: draw the board as a picture in FILE, and once solved the solution in FILE with `-solution` added (`board.png`, `board-solution.png`). Combines with the other options. |
 
 Without `--brute-force` the exit code is 0 when the puzzle is solved, 1 when
@@ -128,7 +129,7 @@ Not implemented: chains. See `AGENT.md`.
 ## Verification
 
 ```bash
-uv run pytest -q                        # 113 tests
+uv run pytest -q                        # 140 tests
 uvx ruff check src tests                # lint
 uvx ruff format --check src tests       # formatting
 uv run mypy src                         # strict type check
@@ -184,6 +185,10 @@ Murdoku uses named sections — see `examples/prrrdoku*.txt`:
 
 ```
 Size: 7
+Language: nl    # optional; language of --explain (en or nl, default en)
+Words:          # optional; how --explain names things
+  water: in het water     # a region or group: where it is
+  vuurtje: het vuurtje    # an object or furniture: what it is called
 Regions:        # id: name [#RRGGBB], e.g. "a: keukenwinkel #FADFB5" (name without spaces)
 Groups:         # optional; name: region region ...
 Hatched:        # optional; regions or groups drawn hatched in pictures
@@ -191,7 +196,9 @@ Grid:           # region id per square, e.g. "a a b b c c c"
 Objects:        # name: square... — blocks those squares; names may repeat
 Furniture:      # optional; name: square... — can be stood on
 People:         # one per line, count must equal Size
-Clues:
+Rules:          # optional; clues that come with the board, not numbered
+  outside Tim water
+Clues:          # numbered 1, 2, ... in the order given
   next_to Tim klimwand               # beside any of the named things, same region
   knight_from Tim klimwand boulder   # a knight's move from any of them
   on Jos bank                        # on a piece of furniture
@@ -214,6 +221,31 @@ is a three-way relation (Luna, Mao, that person).
 `next_to` follows Murdoku's general rule that being next to something never
 crosses a region boundary. Distance (`within`, `at_least`, `furthest`),
 direction (`above`, `left_of`) and `knight_from` do cross regions.
+
+### Worked solutions
+
+`--explain` writes the kind of solution a puzzle booklet prints: one bullet
+per placement (or run of placements), clues cited by number, and people's
+options described by region, row, column or the things on the board, with
+square numbers only when there are a few:
+
+> **Tjitske.** Otto en Pip zijn in hetzelfde gebied (7). Otto zit in een
+> klimgebied of op kantoor, dus Pip zit in een klimgebied of op kantoor.
+> Luna is ergens boven Jos (10), dus Jos zit op r8k3 of r8k4 en Luna zit in
+> rij 6 of 7. ... Luna kan alleen in kolom 1, daar kan verder niemand:
+> **Tjitske op r5k2**.
+
+It is built in three layers that never reach into each other:
+
+1. The solver solves as usual; each logged step records structurally *why*
+   (which constraints or relation, which placement, a what-if's trail).
+2. `proof.shortest` turns each deduction into a replayable `Move` and drops
+   moves, hardest (`what_if`) first, while the rest still solve the
+   puzzle; placements of someone with one option left are free.
+   `proof.essential` trims a what-if to the steps its contradiction needed.
+3. `story` words what is left, in the language and words of the puzzle
+   file. A test checks that every placement it states matches the brute
+   force.
 
 ### Pictures
 
@@ -239,9 +271,11 @@ and code point to `CATALOGUE`.
 ```
 src/csp/
   core.py        engine: literals, constraints, relations, rules, solver
+  proof.py       a short replayable proof of a solve (any puzzle family)
   sudoku.py      Sudoku compiler + renderer
   calcudoku.py   Calcudoku/KenKen compiler + renderer with pencil marks
   murdoku.py     Murdoku compiler + renderer + clue vocabulary and meaning
+  story.py       --explain: Murdoku worked solutions, Dutch or English
   puzzlefile.py  file readers: section format, Murdoku boards, kind detection
   report.py      --show-model: a plain-text account of any compiled model
   cli.py         command line
@@ -250,5 +284,5 @@ src/csp/
   icons.py       object name -> Noto Emoji picture, fetched and cached on use
 examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
                  need), prrrdoku1-3.txt
-tests/           test_solver.py
+tests/           test_solver.py, test_picture.py, test_story.py
 ```
