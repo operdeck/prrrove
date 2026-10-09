@@ -121,6 +121,35 @@ def test_story_describes_by_region_and_row_before_squares():
     assert "Luna kan alleen in kolom 1, daar kan verder niemand" in story
 
 
+@pytest.mark.parametrize("name", ["murdoku_intro.txt", "murdoku_house.txt"])
+def test_english_story_places_everyone_right_and_titles_name_them(name):
+    text = (EXAMPLES / name).read_text()
+    (solution,) = bruteforce.solutions(text)
+    story = explain(text)
+    stated = re.findall(r"\*\*(\w+) on r(\d+)c(\d+)\*\*", story)
+    assert {who: (int(r) - 1, int(c) - 1) for who, r, c in stated} == {
+        who: (sq.row, sq.col) for who, sq in solution.items()
+    }
+    assert len(stated) == len(solution), "each person is placed in bold exactly once"
+    for paragraph in story.split("\n\n")[1:]:
+        title = re.match(r"- \*\*(.+?)\.\*\*", paragraph)[1]
+        placed = re.findall(r"\*\*(\w+) on ", paragraph)
+        assert title == "The rest" or all(who in title for who in placed), paragraph
+
+
+def test_opening_narrows_clue_by_clue_and_places_whoever_it_pins_down():
+    story = explain((EXAMPLES / "murdoku_house.txt").read_text())
+    opening = story.split("\n\n")[0]
+    assert "Ben is on the sofa (4): r3c3 or r3c4." in opening
+    assert "Ben is not next to the lamp (6): **Ben on r3c4**." in opening
+
+
+def test_counting_clue_is_worded_and_known_placements_are_not_bold_again():
+    story = explain((EXAMPLES / "murdoku_house.txt").read_text())
+    assert "Exactly one of these is true: Ada is in the study; Ben is in the hall (1)." in story
+    assert "Ben is on r3c4, so Ada is not in the study" in story
+
+
 def test_story_cites_clue_numbers():
     story = explain((EXAMPLES / "prrrdoku1.txt").read_text())
     assert "Otto is precies één rij boven Tjitske (5)" in story

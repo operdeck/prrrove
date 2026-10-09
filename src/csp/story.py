@@ -23,7 +23,18 @@ from itertools import combinations, groupby
 from typing import Any
 
 from .core import Solver, Step
-from .murdoku import Board, Clue, Condition, Square, board_rules, compile_puzzle, conditions
+from .murdoku import (
+    COUNTING,
+    FILTERS,
+    Board,
+    Clue,
+    Condition,
+    Square,
+    board_rules,
+    compile_puzzle,
+    conditions,
+    counted,
+)
 from .proof import Move, essential, replay, shortest
 from .puzzlefile import load_board, read_sections
 
@@ -77,12 +88,14 @@ PHRASES: dict[str, dict[str, str]] = {
         "clue.in_region": "{a} is {where}",
         "clue.outside": "{a} is not {where}",
         "clue.next_to": "{a} is next to {things}",
+        "clue.not_next_to": "{a} is not next to {things}",
         "clue.knight_from": "{a} is a knight's move from {things}",
         "clue.on": "{a} is on {things}",
         "clue.same_region": "{a} and {b} are in the same region",
         "clue.different_region": "{a} and {b} are in different regions",
         "clue.apart": "{a} and {b} are in regions that do not touch",
         "clue.left_of": "{a} is somewhere left of {b}",
+        "clue.exactly": "exactly {n} of these is true: {list}",
         "clue.above": "{a} is somewhere above {b}",
         "clue.above_n": "{a} is exactly {rows} above {b}",
         "clue.within": "{a} is at most {n} squares from {b}",
@@ -139,12 +152,14 @@ PHRASES: dict[str, dict[str, str]] = {
         "clue.in_region": "{a} is {where}",
         "clue.outside": "{a} is niet {where}",
         "clue.next_to": "{a} zit naast {things}",
+        "clue.not_next_to": "{a} zit niet naast {things}",
         "clue.knight_from": "{a} staat een paardensprong van {things}",
         "clue.on": "{a} ligt op {things}",
         "clue.same_region": "{a} en {b} zijn in hetzelfde gebied",
         "clue.different_region": "{a} en {b} zijn in verschillende gebieden",
         "clue.apart": "{a} en {b} zijn in gebieden die niet aan elkaar grenzen",
         "clue.left_of": "{a} is ergens links van {b}",
+        "clue.exactly": "precies {n} hiervan klopt: {list}",
         "clue.above": "{a} is ergens boven {b}",
         "clue.above_n": "{a} is precies {rows} boven {b}",
         "clue.within": "{a} is hooguit {n} vakjes van {b}",
@@ -157,7 +172,7 @@ PHRASES: dict[str, dict[str, str]] = {
 NUMBERS = {
     "en": ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
            "ten", "eleven", "twelve"],
-    "nl": ["nul", "een", "twee", "drie", "vier", "vijf", "zes", "zeven", "acht", "negen",
+    "nl": ["nul", "één", "twee", "drie", "vier", "vijf", "zes", "zeven", "acht", "negen",
            "tien", "elf", "twaalf"],
 }  # fmt: skip
 
@@ -278,11 +293,16 @@ class Places:
                 break
         return min(found, key=len) if found else None
 
-    def describe(self, who: str, chosen: set[Square], within: set[Square]) -> str:
+    def describe(
+        self, who: str, chosen: set[Square], within: set[Square], *, placing: bool = True
+    ) -> str:
         """The shortest exact way to say where `who` can be, out of `within`:
-        'Jos zit op de woonboot (r8k3 of r8k4)', 'Otto zit niet in rij 1'."""
+        'Jos zit op de woonboot (r8k3 of r8k4)', 'Otto zit niet in rij 1'.
+        One square left is a placement, in bold, unless not `placing`."""
         if len(chosen) == 1:
-            return self.placed(who, min(chosen))
+            if placing:
+                return self.placed(who, min(chosen))
+            return self.say("is", who=who, where=self.say("on", what=self.square(min(chosen))))
         ways: list[str] = []
         if (where := self.where(chosen, within)) is not None:
             listed = f" ({self.squares(chosen)})" if len(chosen) <= MAX_LISTED else ""
@@ -354,7 +374,11 @@ class _State:
     placed: dict[str, Square] = field(default_factory=dict)
     order: list[str] = field(default_factory=list)
     history: list[Step] = field(default_factory=list)
-    announced: set[str] = field(default_factory=set)  # placements already written in bold
+    announced: list[str] = field(default_factory=list)  # placed in bold so far, in order
+
+    def announce(self, person: str) -> None:
+        if person not in self.announced:
+            self.announced.append(person)
 
     def apply(self, steps: Sequence[Step]) -> None:
         for step in steps:
@@ -397,6 +421,7 @@ class Story:
         paragraphs = [self._opening(compiled, state)]
         sentences: list[str] = []
         placed: list[str] = []
+        mark = len(state.announced)  # who the current bullet has placed starts here
         refuted: list[tuple[str, Square, str]] = []  # what_ifs waiting to be said together
         for i, (rule, steps) in enumerate(firings):
             if rule == "what_if":
@@ -404,16 +429,20 @@ class Story:
             else:
                 sentences += self._refuted(refuted)
                 refuted = []
-                sentences += filter(None, [self._firing(rule, steps, state)])
-            if rule == "single":
-                placed.append(steps[0].var)
+                said = self._firing(rule, steps, state)
+                if said:
+                    sentences.append(said)
+                    if rule == "single":
+                        placed.append(steps[0].var)
             last = i + 1 == len(firings)
             if placed and (last or firings[i + 1][0] != "single"):
-                lead = self.say.join(placed)
-                if last and len(placed) > 3:
+                named = state.announced[mark:]
+                lead = self.say.join(named)
+                if last and len(named) > 3:
                     lead = self.say("the_rest")
                 paragraphs.append(f"**{lead}.** {' '.join(sentences)}")
                 sentences, placed = [], []
+                mark = len(state.announced)
         sentences += self._refuted(refuted)
         if sentences:
             paragraphs.append(" ".join(sentences))
@@ -422,18 +451,22 @@ class Story:
     # --- paragraphs and sentences ------------------------------------------
 
     def _opening(self, compiled: Sequence[Step], state: _State) -> str:
+        """Each clue about one person, with where that leaves them right after it."""
         said: list[str] = []
-        seen: set[str] = set()
-        for step in compiled:
-            condition = self.conditions[step.sources[0]]
-            if condition.label in seen or condition.number is None:
-                continue
-            seen.add(condition.label)
-            if condition.kind in ("in_region", "outside"):
+        left = {p: set(self.places.free) for p in self.board.people}
+        for label, group in groupby(compiled, key=lambda s: s.sources[0]):
+            steps = list(group)
+            for step in steps:
+                left[step.var].discard(step.value)
+            condition = self.conditions[label]
+            if condition.number is None or condition.kind in ("in_region", "outside"):
                 continue
             (person,) = condition.people
-            squares = state.options[person]
-            if len(squares) <= MAX_LISTED + 1:
+            squares = left[person]
+            if len(squares) == 1:
+                where = self.places.placed(person, min(squares))
+                state.announce(person)
+            elif len(squares) <= MAX_LISTED + 1:
                 where = self.places.squares(squares)
             else:
                 where = self.say("squares", n=self.say.number(len(squares)))
@@ -456,7 +489,7 @@ class Story:
         for p in people:
             state.told[p] = set(state.options[p])
             if len(state.options[p]) == 1:
-                state.announced.add(p)
+                state.announce(p)
         return self.say.join([self.places.describe(p, state.options[p], before[p]) for p in people])
 
     def _relation(
@@ -469,7 +502,7 @@ class Story:
         evidence = [
             self.places.roughly(p, before[p], aspect)
             if aspect
-            else self.places.describe(p, before[p], self.places.free)
+            else self.places.describe(p, before[p], self.places.free, placing=False)
             for p in condition.people
             if p not in changed and before[p] != self.places.free
         ]
@@ -515,7 +548,7 @@ class Story:
         who, square = step.var, step.value
         if who in state.announced:
             return ""
-        state.announced.add(who)
+        state.announce(who)
         placed = self.places.placed(who, square)
         kind, what = self.about[step.sources[0]]
         gone = state.told[who] - {square}
@@ -635,9 +668,17 @@ class Story:
     # --- clues ---------------------------------------------------------------
 
     def _clue(self, condition: Condition) -> str:
-        kind, args, people = condition.kind, condition.args, condition.people
+        return self._clue_text(condition.kind, condition.args, condition.people)
+
+    def _clue_text(self, kind: str, args: Sequence[str], people: Sequence[str]) -> str:
+        if kind == COUNTING:
+            n, parts = counted(args)
+            listed = "; ".join(
+                self._clue_text(k, rest, rest[: 1 if k in FILTERS else 2]) for k, rest in parts
+            )
+            return self.say("clue.exactly", n=self.say.number(n), list=listed)
         fields: dict[str, Any] = dict(zip("abc", people, strict=False))
-        rest = args[1:] if kind in ("in_region", "outside", "next_to", "knight_from", "on") else ()
+        rest = args[1:] if kind in FILTERS else ()
         if kind in ("in_region", "outside"):
             fields["where"] = self.places.where_regions(rest)
         elif rest:
