@@ -206,6 +206,9 @@ class Model:
     def value_of(self, lit: LiteralId) -> Any:
         return self._literals[lit].value
 
+    def var_of(self, lit: LiteralId) -> str:
+        return self._literals[lit].var
+
     def is_true(self, lit: LiteralId) -> bool:
         return self._state[lit] is Truth.TRUE
 
@@ -361,16 +364,18 @@ def rule_relations(model: Model) -> bool:
     is checked against the options before any are removed, and removing
     options never creates support.
     """
-    for relation in model.relations:
-        domains = [model.options(var) for var in relation.variables]
-        unsupported = _unsupported(model, relation, domains)
-        for lit in unsupported:
-            model.eliminate(
-                lit, "relations", f"nothing satisfies {relation.name}", sources=(relation.name,)
-            )
-        if unsupported:
-            return True
-    return False
+    return any(prune_relation(model, relation) for relation in model.relations)
+
+
+def prune_relation(model: Model, relation: Relation) -> bool:
+    """Drop the values `relation` leaves without support; whether any went."""
+    domains = [model.options(var) for var in relation.variables]
+    unsupported = _unsupported(model, relation, domains)
+    for lit in unsupported:
+        model.eliminate(
+            lit, "relations", f"nothing satisfies {relation.name}", sources=(relation.name,)
+        )
+    return bool(unsupported)
 
 
 def _unsupported(
@@ -407,28 +412,44 @@ def rule_subsumption(model: Model) -> bool:
     for a in model.constraints:
         if a.kind is not Kind.EXACTLY_ONE or model.satisfied(a.index):
             continue
-        inner = set(model.live(a.index))
-        if not inner:
-            continue
-        candidates: set[int] = set()
-        for lit in inner:
+        candidates: set[ConstraintId] = set()
+        for lit in model.live(a.index):
             candidates.update(model.constraints_of(lit))
-        for bi in candidates:
-            if bi == a.index or model.satisfied(bi):
-                continue
-            outer = set(model.live(bi))
-            if inner <= outer and len(outer) > len(inner):
-                b = model.constraints[bi]
-                for lit in sorted(outer - inner):
-                    model.eliminate(
-                        lit,
-                        "subsumption",
-                        f"{a.name} already uses one of {b.name}",
-                        sources=(a.name,),
-                        scope=(b.name,),
-                    )
-                return True
+        candidates.discard(a.index)
+        if any(cover(model, [a.index], [b]) for b in sorted(candidates)):
+            return True
     return False
+
+
+def cover(model: Model, inner: Sequence[ConstraintId], outer: Sequence[ConstraintId]) -> bool:
+    """If the `inner` EXACTLY_ONE constraints, with disjoint options, fit
+    inside as many `outer` ones, rule out the rest of `outer`.
+
+    Whether anything was ruled out. This is the step behind both
+    `rule_subsumption` (one of each) and `rule_cover`; see those for why it
+    is sound.
+    """
+    constraints = model.constraints
+    if len(outer) > len(inner) or any(constraints[a].kind is not Kind.EXACTLY_ONE for a in inner):
+        return False
+    if any(model.satisfied(ci) for ci in (*inner, *outer)):
+        return False
+    lives = [set(model.live(a)) for a in inner]
+    union = set().union(*lives)
+    if not all(lives) or len(union) != sum(map(len, lives)):
+        return False
+    around = set().union(*(model.live(b) for b in outer))
+    if not union < around:
+        return False
+    a_names = tuple(constraints[a].name for a in inner)
+    b_names = tuple(constraints[b].name for b in outer)
+    if len(inner) == 1:
+        rule, reason = "subsumption", f"{a_names[0]} already uses one of {b_names[0]}"
+    else:
+        rule, reason = f"cover{len(inner)}", f"{', '.join(a_names)} use up {', '.join(b_names)}"
+    for lit in sorted(around - union):
+        model.eliminate(lit, rule, reason, sources=a_names, scope=b_names)
+    return True
 
 
 def rule_cover(k: int) -> Callable[[Model], bool]:
@@ -491,12 +512,7 @@ class _CoverSearch:
                 self._grow(group | {ci}, union | self.live[ci], first)
                 for ci in self._neighbours(group, union, first)
             )
-        for bs in self._covers(union, (), group):
-            extra = frozenset().union(*(self.live[b] for b in bs)) - union
-            if extra:
-                self._eliminate(group, bs, extra)
-                return True
-        return False
+        return any(cover(self.model, sorted(group), bs) for bs in self._covers(union, (), group))
 
     def _covers(
         self,
@@ -533,19 +549,6 @@ class _CoverSearch:
             if ci in self.anchors and ci > first and ci not in group and not self.live[ci] & union
         )
 
-    def _eliminate(
-        self,
-        group: frozenset[ConstraintId],
-        bs: tuple[ConstraintId, ...],
-        extra: frozenset[LiteralId],
-    ) -> None:
-        constraints = self.model.constraints
-        a_names = tuple(constraints[a].name for a in sorted(group))
-        b_names = tuple(constraints[b].name for b in bs)
-        reason = f"{', '.join(a_names)} use up {', '.join(b_names)}"
-        for lit in sorted(extra):
-            self.model.eliminate(lit, f"cover{self.k}", reason, sources=a_names, scope=b_names)
-
 
 _WHAT_IF_INNER = (rule_single, rule_relations, rule_subsumption)
 
@@ -560,14 +563,22 @@ def rule_what_if(model: Model) -> bool:
     """
     undecided = [var for var in model.variables if model.chosen(var) is None]
     for var in sorted(undecided, key=lambda v: len(model.options(v))):
-        for lit in model.options(var):
-            refutation = _refute(model, lit)
-            if refutation is not None:
-                reason, trail, broken = refutation
-                sources = () if broken is None else (broken,)
-                model.eliminate(lit, "what_if", reason, sources=sources, trail=trail)
-                return True
+        if any(refute(model, lit) for lit in model.options(var)):
+            return True
     return False
+
+
+def refute(model: Model, lit: LiteralId) -> bool:
+    """Rule `lit` out if assuming it leads the cheap rules to a contradiction."""
+    if model.is_true(lit) or model.is_false(lit):
+        return False
+    refutation = _refute(model, lit)
+    if refutation is None:
+        return False
+    reason, trail, broken = refutation
+    sources = () if broken is None else (broken,)
+    model.eliminate(lit, "what_if", reason, sources=sources, trail=trail)
+    return True
 
 
 def _refute(model: Model, lit: LiteralId) -> tuple[str, tuple[Step, ...], str | None] | None:
