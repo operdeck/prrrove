@@ -18,6 +18,8 @@ from csp.core import (
     Model,
     Rule,
     Solver,
+    follow_chain,
+    rule_chains,
     rule_cover,
     rule_relations,
     rule_single,
@@ -196,7 +198,7 @@ GRADED = [
     ("sudoku_hidden_pair.txt", "cover2", rf"^{HOUSE}, {HOUSE} use up r\dc\d holds"),
     ("sudoku_xwing.txt", "cover2", rf"^{FISH}, \1 {LINE} use up \1 once in (?!\2)"),
     ("sudoku_swordfish.txt", "cover3", rf"^{FISH}, \1 {LINE}, \1 {LINE} use up \1 once in (?!\2)"),
-    ("sudoku_what_if.txt", "what_if", r"^assuming it leads"),
+    ("sudoku_chains.txt", "chains", r"holds, by a chain of"),
 ]
 
 
@@ -453,12 +455,53 @@ def test_later_prrrdokus_reach_the_published_solution(name):
     ] == company
 
 
-@pytest.mark.parametrize("name", ["prrrdoku2.txt", "prrrdoku3.txt"])
-def test_later_prrrdokus_need_what_if(name):
-    """The document's own solutions split on cases here; so must the engine."""
-    _, model = _load(name)
+def test_prrrdoku2_needs_chains():
+    """The document splits on cases here; chains do it without guessing."""
+    _, model = _load("prrrdoku2.txt")
+    result = Solver(model, _before("chains")).solve()
+    assert not result.solved and result.contradiction is None
+    _, model = _load("prrrdoku2.txt")
+    assert Solver(model, _before("what_if")).solve().solved
+
+
+def test_prrrdoku3_still_needs_what_if():
+    _, model = _load("prrrdoku3.txt")
     result = Solver(model, _before("what_if")).solve()
     assert not result.solved and result.contradiction is None
+
+
+def _chain_model(weak_by_relation: bool) -> Model:
+    """A1 or A2, B1 or B2, T1 or T2; A2 and B1 exclude each other, and T1
+    excludes both A1 and B2. Chain: A1 false, A2 true, B1 false, B2 true."""
+    m = Model()
+    lits = {(v, i): m.literal(v, i) for v in "ABT" for i in (1, 2)}
+    for v in "ABT":
+        m.constrain(f"{v} one", Kind.EXACTLY_ONE, [lits[v, 1], lits[v, 2]], defines=v)
+    if weak_by_relation:
+        m.relate("not A2 with B1", ("A", "B"), lambda a, b: (a, b) != (2, 1))
+    else:
+        m.constrain("A2 or B1", Kind.AT_MOST_ONE, [lits["A", 2], lits["B", 1]])
+    m.constrain("A1 or T1", Kind.AT_MOST_ONE, [lits["A", 1], lits["T", 1]])
+    m.constrain("B2 or T1", Kind.AT_MOST_ONE, [lits["B", 2], lits["T", 1]])
+    return m
+
+
+@pytest.mark.parametrize("weak_by_relation", [False, True])
+def test_chains_rule_out_what_excludes_both_ends(weak_by_relation):
+    m = _chain_model(weak_by_relation)
+    assert not rule_relations(m) and not rule_subsumption(m)
+    assert rule_chains(m)
+    (step,) = m.log
+    assert (step.var, step.value, step.asserted) == ("T", 1, False)
+    assert step.chain == (("A", 1), ("A", 2), ("B", 1), ("B", 2))
+    assert step.sources == ("A one", "not A2 with B1" if weak_by_relation else "A2 or B1", "B one")
+
+
+def test_follow_chain_refuses_a_broken_chain():
+    m = _chain_model(False)
+    a1, a2, b1, b2 = (m.literal(v, i) for v, i in (("A", 1), ("A", 2), ("B", 1), ("B", 2)))
+    assert not follow_chain(m, [a1, b1, a2, b2])
+    assert not m.log
 
 
 def test_furniture_can_be_stood_on_and_objects_cannot():

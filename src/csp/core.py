@@ -13,6 +13,7 @@ Nothing in this module knows about any particular puzzle.
 """
 
 import copy
+import itertools
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -92,6 +93,8 @@ class Step:
     `scope` the constraints whose other options it pruned (subsumption,
     cover). `placing` is the var=value whose placement ruled this one out.
     `trail` holds what_if's steps from the assumption to the contradiction.
+    `chain` holds a chain's literals as (var, value), start first: false,
+    true, false, ... alternately, ending on one that must then be true.
     """
 
     var: str
@@ -103,6 +106,7 @@ class Step:
     scope: tuple[str, ...] = ()
     placing: tuple[str, Any] | None = None
     trail: tuple["Step", ...] = ()
+    chain: tuple[tuple[str, Any], ...] = ()
 
     @property
     def literal(self) -> str:
@@ -261,6 +265,7 @@ class Model:
         scope: tuple[str, ...] = (),
         placing: tuple[str, Any] | None = None,
         trail: tuple[Step, ...] = (),
+        chain: tuple[tuple[str, Any], ...] = (),
     ) -> bool:
         """Rule `lit` out. Returns whether that changed anything.
 
@@ -277,7 +282,18 @@ class Model:
         self._state[lit] = Truth.FALSE
         literal = self._literals[lit]
         self.log.append(
-            Step(literal.var, literal.value, False, rule, reason, sources, scope, placing, trail)
+            Step(
+                literal.var,
+                literal.value,
+                False,
+                rule,
+                reason,
+                sources,
+                scope,
+                placing,
+                trail,
+                chain,
+            )
         )
         return True
 
@@ -553,6 +569,123 @@ class _CoverSearch:
 _WHAT_IF_INNER = (rule_single, rule_relations, rule_subsumption)
 
 
+def rule_chains(model: Model) -> bool:
+    """If one of two options must hold, anything that excludes both is false.
+
+    A strong link joins the last two options of an EXACTLY_ONE constraint:
+    if one is false, the other is true. A weak link joins two options that
+    cannot both hold: they share a constraint, or a two-variable relation
+    has no satisfying pair with both. Assume a start option false and follow
+    strong and weak links in turn; each option reached as true makes "the
+    start or this one" certain, so every option weakly linked to both is
+    false. Each link is a valid implication, so this is sound for any model.
+
+    In Sudoku this is simple colouring, X- and XY-chains, Y- and W-wings
+    and 3D Medusa: alternating inference chains. The shortest chain that
+    rules anything out is used.
+    """
+    links = _Links(model)
+    best: list[LiteralId] | None = None
+    for start in sorted(links.strong):
+        chain = links.shortest_from(start, longest=len(best) if best else None)
+        if chain is not None and (best is None or len(chain) < len(best)):
+            best = chain
+    return best is not None and follow_chain(model, best, links)
+
+
+def follow_chain(model: Model, chain: Sequence[LiteralId], links: "_Links | None" = None) -> bool:
+    """Rule out every option weakly linked to both ends of `chain`, if its
+    links all still hold; whether anything was ruled out."""
+    links = links or _Links(model)
+    if len(chain) < 2 or len(chain) % 2:
+        return False
+    for i, (a, b) in enumerate(itertools.pairwise(chain)):
+        if b not in (links.weak if i % 2 else links.strong).get(a, ()):
+            return False
+    first, last = chain[0], chain[-1]
+    targets = sorted((links.weak.get(first, set()) & links.weak.get(last, set())) - {first, last})
+    if not targets:
+        return False
+    pairs = tuple((model.var_of(x), model.value_of(x)) for x in chain)
+    why = tuple(links.why[frozenset(link)] for link in itertools.pairwise(chain))
+    reason = f"{model.describe(first)} or {model.describe(last)} holds, by a chain of {len(chain)}"
+    for lit in targets:
+        model.eliminate(lit, "chains", reason, sources=why, chain=pairs)
+    return True
+
+
+class _Links:
+    """Strong and weak links between the open options, for `rule_chains`, and
+    `why` each holds: the name of a constraint or relation behind it."""
+
+    def __init__(self, model: Model) -> None:
+        self.model = model
+        self.strong: dict[LiteralId, set[LiteralId]] = {}
+        self.weak: dict[LiteralId, set[LiteralId]] = {}
+        self.why: dict[frozenset[LiteralId], str] = {}
+        for c in model.constraints:
+            if model.satisfied(c.index):
+                continue
+            live = model.live(c.index)
+            if c.kind is Kind.EXACTLY_ONE and len(live) == 2:
+                a, b = live
+                self.strong.setdefault(a, set()).add(b)
+                self.strong.setdefault(b, set()).add(a)
+                self.why.setdefault(frozenset((a, b)), c.name)
+            for a, b in itertools.combinations(live, 2):
+                self._weak(a, b, c.name)
+        for relation in model.relations:
+            if len(relation.variables) != 2:
+                continue
+            left, right = (self._open(var) for var in relation.variables)
+            for a, b in itertools.product(left, right):
+                if not relation.holds(model.value_of(a), model.value_of(b)):
+                    self._weak(a, b, relation.name)
+
+    def _open(self, var: str) -> list[LiteralId]:
+        return [lit for lit in self.model.options(var) if not self.model.is_true(lit)]
+
+    def _weak(self, a: LiteralId, b: LiteralId, why: str) -> None:
+        self.weak.setdefault(a, set()).add(b)
+        self.weak.setdefault(b, set()).add(a)
+        self.why.setdefault(frozenset((a, b)), why)
+
+    def shortest_from(self, start: LiteralId, longest: int | None) -> list[LiteralId] | None:
+        """The shortest chain from `start` (assumed false) that rules something
+        out, no longer than `longest` options; breadth first."""
+        parent: dict[tuple[LiteralId, bool], tuple[LiteralId, bool] | None] = {(start, False): None}
+        frontier = [(start, False)]
+        length = 1
+        while frontier and (longest is None or length < longest):
+            length += 1
+            reached = []
+            for lit, true in frontier:
+                for nxt in sorted((self.weak if true else self.strong).get(lit, ())):
+                    state = (nxt, not true)
+                    if state in parent:
+                        continue
+                    parent[state] = (lit, true)
+                    reached.append(state)
+                    if not true and nxt != start:
+                        both = self.weak.get(start, set()) & self.weak.get(nxt, set())
+                        if both - {start, nxt}:
+                            return self._path(parent, state)
+            frontier = reached
+        return None
+
+    @staticmethod
+    def _path(
+        parent: dict[tuple[LiteralId, bool], tuple[LiteralId, bool] | None],
+        state: tuple[LiteralId, bool],
+    ) -> list[LiteralId]:
+        path: list[LiteralId] = []
+        at: tuple[LiteralId, bool] | None = state
+        while at is not None:
+            path.append(at[0])
+            at = parent[at]
+        return path[::-1]
+
+
 def rule_what_if(model: Model) -> bool:
     """Assume a literal on a copy; if the cheap rules then contradict, it is false.
 
@@ -602,6 +735,7 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     Rule("subsumption", rule_subsumption),
     Rule("cover2", rule_cover(2)),
     Rule("cover3", rule_cover(3)),
+    Rule("chains", rule_chains),
     Rule("what_if", rule_what_if),
 )
 
