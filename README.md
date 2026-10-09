@@ -6,7 +6,8 @@ puzzle they are solving.
 
 Currently solved: **Sudoku** (9x9), **Murdoku/Prrrdoku** (any size) and
 **Calcudoku/KenKen** (any size).
-Requires Python 3.12+; no runtime dependencies.
+Requires Python 3.12+. The solver has no runtime dependencies; `--png` needs
+Pillow (`uv sync --extra png`).
 
 ```bash
 ./solve.sh examples/sudoku_easy.txt
@@ -28,6 +29,7 @@ detected from the file; `--type sudoku|murdoku|calcudoku` overrides that.
 | `--step`, `-s` | Narrate, redraw the board, and wait for Enter after each deduction. Murdoku crosses out squares nobody can reach and lists whose options narrowed; Calcudoku shows the numbers still possible in each cell, like pencil marks. What changed is drawn in blue. |
 | `--show-model` | Explain what the engine sees, then stop: variables, constraint families, how literals and constraints overlap, what the clues settled at compile time, each relation, and the rule ladder. The quickest way into the design. |
 | `--brute-force` | Find the solutions by plain search instead of deduction, then stop. Exit code 0 if there is exactly one, 1 if there are none or several (it shows two and where they differ). The check to run after transcribing a puzzle. |
+| `--png FILE` | Murdoku only: draw the board as a picture in FILE, and once solved the solution in FILE with `-solution` added (`board.png`, `board-solution.png`). Combines with the other options. |
 
 Without `--brute-force` the exit code is 0 when the puzzle is solved, 1 when
 the rules run out or hit a contradiction, and 2 when the file cannot be read.
@@ -126,10 +128,10 @@ Not implemented: chains. See `AGENT.md`.
 ## Verification
 
 ```bash
-uv run --with pytest pytest -q          # 104 tests
+uv run pytest -q                        # 113 tests
 uvx ruff check src tests                # lint
 uvx ruff format --check src tests       # formatting
-uvx mypy src                            # strict type check
+uv run mypy src                         # strict type check
 ```
 
 Correctness is checked against ground truth, not self-consistency:
@@ -182,8 +184,9 @@ Murdoku uses named sections — see `examples/prrrdoku*.txt`:
 
 ```
 Size: 7
-Regions:        # id: name, e.g. "a: keukenwinkel" (name without spaces)
+Regions:        # id: name [#RRGGBB], e.g. "a: keukenwinkel #FADFB5" (name without spaces)
 Groups:         # optional; name: region region ...
+Hatched:        # optional; regions or groups drawn hatched in pictures
 Grid:           # region id per square, e.g. "a a b b c c c"
 Objects:        # name: square... — blocks those squares; names may repeat
 Furniture:      # optional; name: square... — can be stood on
@@ -212,6 +215,25 @@ is a three-way relation (Luna, Mao, that person).
 crosses a region boundary. Distance (`within`, `at_least`, `furthest`),
 direction (`above`, `left_of`) and `knight_from` do cross regions.
 
+### Pictures
+
+`--png` draws a Murdoku board from the puzzle file in the printed Prrrdoku
+style: region colours (from `Regions:`, or a default palette), a darker shade
+under objects, hatching where `Hatched:` says, thick lines between regions,
+icons for objects and furniture, name tags for people, coordinates and a
+legend. Because it is drawn from the same file the solver reads, the picture
+cannot disagree with the puzzle.
+
+Icons are referenced, not stored in the repo: `src/csp/icons.py` maps object
+names (Dutch and English, e.g. `koffer`/`suitcase`; `boom2` counts as `boom`)
+to Unicode emoji code points, and the pictures come from Google's
+[Noto Emoji](https://github.com/googlefonts/noto-emoji) (images under the
+Apache License 2.0), pinned to one commit so a name always gives the same
+picture. They are downloaded on first use into `~/.cache/csp-solver`
+(override with `CSP_ICON_CACHE`). An object not in the catalogue, or any
+object when offline, is drawn as its name. To add an object, add its name
+and code point to `CATALOGUE`.
+
 ## Layout
 
 ```
@@ -224,6 +246,8 @@ src/csp/
   report.py      --show-model: a plain-text account of any compiled model
   cli.py         command line
   bruteforce/    --brute-force: plain search per puzzle family, no engine
+  picture.py     --png: Murdoku board pictures (Pillow)
+  icons.py       object name -> Noto Emoji picture, fetched and cached on use
 examples/        sudoku_*.txt and calcudoku_*.txt (graded by the rule they
                  need), prrrdoku1-3.txt
 tests/           test_solver.py

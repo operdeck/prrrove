@@ -57,9 +57,15 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
     size = int(section["Size"][0])
 
     region_names = {}
+    colours = {}
     for line in section["Regions"]:
-        rid, _, name = line.partition(":")
-        region_names[rid.strip()] = name.strip()
+        rid, _, rest = line.partition(":")
+        name, *colour = rest.split()
+        region_names[rid.strip()] = name
+        if colour:
+            if not re.fullmatch(r"#[0-9A-Fa-f]{6}", colour[0]):
+                raise ValueError(f"region {name}: colour {colour[0]!r} is not like #F4CBC3")
+            colours[rid.strip()] = colour[0].upper()
 
     grid = [line.split() for line in section["Grid"]]
     if len(grid) != size or any(len(row) != size for row in grid):
@@ -85,8 +91,11 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
         kind, *args = line.split()
         clues.append((kind, args))
 
-    board = Board(size, grid, region_names, objects, people, groups, furniture)
+    board = Board(size, grid, region_names, objects, people, groups, furniture, colours)
     board.region_ids(groups)  # fails now, not mid-solve, if a group names an unknown region
+    board.hatched = board.region_ids(
+        name for line in section.get("Hatched", []) for name in line.split()
+    )
     return board, clues
 
 

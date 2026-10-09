@@ -13,11 +13,17 @@ dependencies = []
 [project.scripts]
 csp = "csp.cli:main"
 
+[project.optional-dependencies]
+png = [
+    "pillow>=10.1",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "mypy>=1.11",
+    "pillow>=10.1",
 ]
 
 [tool.ruff]

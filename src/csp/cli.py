@@ -79,6 +79,22 @@ def brute_force(puzzle: Puzzle, text: str) -> int:
     return 1
 
 
+def write_picture(kind: str, text: str, path: Path, solution: dict[str, Any] | None = None) -> bool:
+    """Save the board as a PNG, with `solution` drawn in if given."""
+    if kind != "murdoku":
+        print(f"--png only draws Murdoku boards so far, not {kind}", file=sys.stderr)
+        return False
+    try:
+        from . import picture
+    except ImportError:
+        print("--png needs Pillow: uv sync --extra png", file=sys.stderr)
+        return False
+    board, _ = load_board(text)
+    picture.murdoku_picture(board, solution).save(path)
+    print(f"wrote {path}")
+    return True
+
+
 def _filled(model: Model, solution: dict[str, Any]) -> Model:
     """A copy of `model` with every variable set as in `solution`, for drawing.
 
@@ -112,6 +128,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="search for every solution without the engine, to check uniqueness",
     )
+    parser.add_argument(
+        "--png",
+        type=Path,
+        metavar="FILE",
+        help="Murdoku only: write the board as a picture to FILE, and once solved the "
+        "solution to FILE with '-solution' before the extension (needs Pillow)",
+    )
     args = parser.parse_args(argv)
 
     path: Path = args.puzzle
@@ -132,6 +155,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{len(model.relations)} relations"
     )
     print(puzzle.draw("Start"))
+    if args.png and not write_picture(kind, text, args.png):
+        return 2
 
     if args.show_model:
         print(f"\n{report.describe(model)}")
@@ -154,6 +179,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if result.solved:
         print(puzzle.draw("Solved"))
+        if args.png:
+            solved = args.png.with_stem(f"{args.png.stem}-solution")
+            write_picture(kind, text, solved, result.assignment)
     elif result.contradiction:
         print(puzzle.draw("Stuck"))
         print(f"\ncontradiction: {result.contradiction}")

@@ -9,13 +9,13 @@
 Size: 9
 
 Regions:
-a: klimgebied
-b: keukenwinkel
-c: moestuin
-d: speeltuin
-e: kampeerplek
-f: cafe
-g: tuin
+a: klimgebied #F3C8C0
+b: keukenwinkel #FADFB5
+c: moestuin #CBE6B9
+d: speeltuin #BEE5D6
+e: kampeerplek #D8D2F0
+f: cafe #C4DCF2
+g: tuin #F3EDA2
 
 Grid:
 a a a b b b c c c

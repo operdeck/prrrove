@@ -17,18 +17,22 @@
 Size: 9
 
 Regions:
-a: klimgebied_noord
-b: klimgebied_zuid
-c: moestuin
-d: helmholtzstraat
-e: bankastraat
-f: kantoor
-g: woonboot
-h: water
+a: klimgebied_noord #F4CBC3
+b: klimgebied_zuid #E0A79C
+c: moestuin #CBE6B9
+d: helmholtzstraat #FADFB5
+e: bankastraat #F3EDA2
+f: kantoor #DCDCDC
+g: woonboot #C79A6A
+h: water #A9D6F0
 
 Groups:
 klimgebied: klimgebied_noord klimgebied_zuid
 amsterdam: helmholtzstraat bankastraat kantoor woonboot water
+
+# Amsterdam is hatched on the printed board.
+Hatched:
+amsterdam
 
 Grid:
 d d d d d e a a a

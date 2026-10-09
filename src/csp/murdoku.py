@@ -63,7 +63,8 @@ class Board:
     `regions` holds a short region id per square (a letter, say) and
     `region_names` maps each id to its name. `objects` block their squares;
     `furniture` (such as a bank to lie on) does not. Several things may share
-    a name, like three suitcases.
+    a name, like three suitcases. `colours` (region id -> '#RRGGBB') and
+    `hatched` (region ids) only affect pictures.
     """
 
     size: int
@@ -73,6 +74,8 @@ class Board:
     people: list[str]
     groups: dict[str, list[str]] = field(default_factory=dict)
     furniture: dict[str, list[Square]] = field(default_factory=dict)
+    colours: dict[str, str] = field(default_factory=dict)
+    hatched: set[str] = field(default_factory=set)
     free: list[Square] = field(init=False)
     borders: set[frozenset[str]] = field(init=False)
 
