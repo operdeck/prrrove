@@ -118,7 +118,7 @@ def test_story_is_bullets_and_leads_with_the_direct_clues(name):
 def test_story_describes_by_region_and_row_before_squares():
     story = explain((EXAMPLES / "prrrdoku3.txt").read_text())
     assert "Luna zit in het water" in story
-    assert "dus Pip zit in een klimgebied of op kantoor" in story
+    assert "Otto zit in een klimgebied, dus Pip zit in een klimgebied" in story
     assert "Luna kan alleen in kolom 1, daar kan verder niemand" in story
 
 
@@ -152,7 +152,8 @@ def test_counting_clue_is_worded_and_known_placements_are_not_bold_again():
 
 
 def test_chains_are_told_as_if_then_with_the_reason_for_each_link():
-    story = explain((EXAMPLES / "prrrdoku2.txt").read_text())
+    text = (EXAMPLES / "prrrdoku2.txt").read_text()
+    story = explain(text.replace("at_least Jos Mao 13\n", ""))
     assert (
         "Als Otto niet op r6k5 zit, dan zit Otto op r7k6, dan zit Luna niet op r7k4 (rij 7), "
         "dan zit Luna op r8k3. Dus Otto zit op r6k5 of Luna zit op r8k3; hoe dan ook"

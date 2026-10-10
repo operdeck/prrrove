@@ -321,12 +321,12 @@ def test_people_are_the_variables(prrrdoku1):
     assert model.num_literals == 7 * 43
 
 
-def test_clue_filtering_matches_the_published_candidate_lists(prrrdoku1):
-    """These four lists are quoted verbatim in the document's solution."""
+def test_prrrdoku1_candidate_lists_after_late_reveal_board_change(prrrdoku1):
+    """The region tweak removes r4c2 from Tjitske's next-to candidates."""
     board, model = prrrdoku1
     open_sq = {p: [str(s) for s in sqs] for p, sqs in murdoku.open_squares(board, model).items()}
     assert open_sq["Tim"] == ["r1c1", "r2c2", "r3c1"]
-    assert open_sq["Tjitske"] == ["r4c2", "r5c1", "r6c2"]
+    assert open_sq["Tjitske"] == ["r5c1", "r6c2"]
     assert open_sq["Jos"] == ["r1c4", "r1c5", "r2c4", "r3c4", "r3c5", "r3c6"]
     assert open_sq["Pip"] == ["r1c6", "r1c7", "r2c6", "r2c7", "r4c7", "r5c7"]
 
@@ -465,14 +465,15 @@ def test_prrrdoku2_region_borders_match_the_document():
     assert touching == {"klimgebied", "keukenwinkel", "cafe", "kampeerplek"}
 
 
-def test_prrrdoku3_candidate_lists_match_the_document():
-    """The five lists the document's solution opens with."""
+def test_prrrdoku3_candidate_lists_after_late_reveal_board_change():
+    """The region tweak adds r2c5 to Anna's starting candidates."""
     board, model = _load("prrrdoku3.txt")
     open_sq = _open(board, model)
     assert open_sq["Tjitske"] == ["r4c1", "r5c2"]
     assert open_sq["Jos"] == ["r1c2", "r1c3", "r3c4", "r3c5", "r8c3", "r8c4"]
     assert open_sq["Tim"] == ["r1c6", "r3c6", "r6c7", "r6c9", "r7c6", "r9c6"]
-    assert len(open_sq["Anna"]) == 7
+    assert len(open_sq["Anna"]) == 8
+    assert "r2c5" in open_sq["Anna"]
     assert len(open_sq["Luna"]) == 19
 
 
@@ -526,13 +527,11 @@ def test_later_prrrdokus_reach_the_published_solution(name):
     ] == company
 
 
-def test_prrrdoku2_needs_chains():
-    """The document splits on cases here; chains do it without guessing."""
+def test_prrrdoku2_late_reveal_variant_solves_before_chains():
+    """The added clue preserves the answer and lets cheaper rules finish."""
     _, model = _load("prrrdoku2.txt")
     result = Solver(model, _before("chains")).solve()
-    assert not result.solved and result.contradiction is None
-    _, model = _load("prrrdoku2.txt")
-    assert Solver(model, _before("what_if")).solve().solved
+    assert result.solved
 
 
 def test_prrrdoku3_still_needs_what_if():
@@ -855,6 +854,56 @@ def test_cli_brute_force_exit_codes(tmp_path, capsys):
     assert "more than one solution" in capsys.readouterr().out
 
 
+def test_cli_tracks_murdoku_person_candidates(capsys):
+    assert cli.main([str(EXAMPLES / "prrrdoku1.txt"), "--track-person", "Vladimir"]) == 0
+    out = capsys.readouterr().out
+    assert "tracked Vladimir:" in out
+    assert "region-overlap companions:" in out
+    assert "tracked Vladimir: r7c3 (kampeerplek)" in out
+
+
+@pytest.mark.parametrize("name", ["prrrdoku1.txt", "prrrdoku2.txt", "prrrdoku3.txt"])
+def test_prrrdokus_keep_vladimir_open_until_last(name):
+    board, clues = load_board((EXAMPLES / name).read_text())
+    model = murdoku.compile_puzzle(board, clues)
+    placements = []
+    before_last = []
+
+    def inspect_open_target():
+        remaining_people = [
+            person
+            for person in board.people
+            if person != "Vladimir" and model.chosen(person) is None
+        ]
+        if model.chosen("Vladimir") is None and remaining_people:
+            squares, companions = murdoku.track_person_candidates(board, model, "Vladimir")
+            before_last.append((len(squares), len(companions)))
+
+    inspect_open_target()
+
+    def on_step(rule, steps):
+        assigned = [step.var for step in steps if step.asserted]
+        placements.extend(assigned)
+        if "Vladimir" in assigned:
+            assert assigned == ["Vladimir"]
+            assert all(
+                model.chosen(person) is not None for person in board.people if person != "Vladimir"
+            )
+        else:
+            inspect_open_target()
+
+    result = Solver(model).solve(on_step=on_step)
+    assert result.solved
+    assert placements[-1] == "Vladimir"
+    assert before_last
+    assert all(
+        square_count > 1 and companion_count > 1 for square_count, companion_count in before_last
+    )
+    squares, companions = murdoku.track_person_candidates(board, model, "Vladimir")
+    assert len(squares) == 1
+    assert len(companions) == 1
+
+
 # --- model report ---------------------------------------------------------
 
 
@@ -865,7 +914,7 @@ def test_report_describes_prrrdoku1_as_the_engine_sees_it():
     assert re.search(r"each square holds at most one person\s+AT_MOST_ONE\s+43\s+7", text)
     assert "Every literal sits in exactly 4 constraints." in text
     assert re.search(r"next_to Tim klimwand\s+40 ruled out", text)
-    assert re.search(r"Otto above Tjitske 1\s+18 of 129", text)
+    assert re.search(r"Otto above Tjitske 1\s+12 of 86", text)
     assert all(re.search(rf"\d\. {rule.name}\s", text) for rule in DEFAULT_RULES)
     assert "cover2       Subsumption over 2 constraints" in text
 
@@ -904,6 +953,7 @@ def test_grade_is_the_hardest_rung_used():
         ("sudoku_pointing.txt", "subsumption"),
         ("sudoku_swordfish.txt", "cover3"),
         ("sudoku_chains.txt", "chains"),
+        ("prrrdoku2.txt", "relations"),
         ("prrrdoku3.txt", "what_if"),
     ],
 )

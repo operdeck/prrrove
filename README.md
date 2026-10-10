@@ -150,6 +150,7 @@ Calcudoku any size.
 ```bash
 ./solve.sh examples/prrrdoku3.txt --explain        # a 9 × 9 with three cats, in Dutch
 ./solve.sh examples/prrrdoku1.txt --step           # watch it deduce, step by step
+./solve.sh examples/prrrdoku1.txt --track-person Vladimir
 ./solve.sh examples/sudoku_swordfish.txt --verbose
 ./solve.sh examples/calcudoku_6x6_hard.txt --show-model
 ```
@@ -167,6 +168,7 @@ detected from the file; `--type sudoku|murdoku|calcudoku|futoshiki` overrides th
 | *(none)* | Solve by deduction and print the start and end boards. |
 | `--verbose`, `-v` | Narrate each deduction: the rule, what it placed or ruled out, and why. |
 | `--step`, `-s` | Narrate, redraw the board, and wait for Enter after each deduction. Murdoku crosses out squares nobody can reach and lists whose options narrowed; Calcudoku and Futoshiki show the numbers still possible in each cell, like pencil marks. What changed is drawn in blue. |
+| `--track-person NAME` | Murdoku only: show one person's live squares and region-overlap companion candidates after each deduction. The companion list is a conservative domain-overlap diagnostic, not a joint-solution check. |
 | `--show-model` | Explain what the engine sees, then stop: variables, constraint families, how literals and constraints overlap, what the clues settled at compile time, each relation, and the rule ladder. The quickest way into the design. |
 | `--brute-force` | Find the solutions by plain search instead of deduction, then stop. Exit code 0 if there is exactly one, 1 if there are none or several (it shows two and where they differ). The check to run after transcribing a puzzle. |
 | `--explain` | Murdoku only: write out a short worked solution, as Markdown bullets, in the puzzle's language. See [Worked solutions](#worked-solutions). |
@@ -195,18 +197,20 @@ file cannot be read.
 | `murdoku_intro.txt` | `single` only: the 4×4 first case above |
 | `murdoku_house.txt` | `relations`, `subsumption`: a 5×5 using "not next to" and a counting clue |
 | `prrrdoku1.txt` | `relations`, `subsumption` |
-| `prrrdoku2.txt` | `cover2`, `cover3`, `chains` |
-| `prrrdoku3.txt` | `chains`, `what_if` |
+| `prrrdoku2.txt` | `relations` |
+| `prrrdoku3.txt` | `what_if` |
 | `calcudoku_4x4_easy.txt`, `calcudoku_6x6_medium.txt` | `relations` (cage arithmetic) |
 | `calcudoku_6x6_hard.txt` | `cover2` |
 | `calcudoku_6x6_fiendish.txt` | `what_if` |
 | `calcudoku_7x7_hard.txt` | `cover3` |
 
-`prrrdoku1-3.txt` are transcribed from a set of Dutch puzzle documents (not
-in this repo), with cats among the suspects. The graded Sudokus and their
-variants, the Calcudokus and the Futoshiki are generated (newspaper puzzles
-are copyrighted) and picked
-because each needs the rule listed. Every one has exactly one solution.
+`prrrdoku1-3.txt` are based on the owner's Dutch puzzle documents (not in this
+repo), with cats among the suspects. Their boards and clues are lightly
+adjusted to preserve the intended solution while keeping Vladimir's location
+and companion unresolved until the final placement. The graded Sudokus and
+their variants, the Calcudokus and the Futoshiki are generated (newspaper
+puzzles are copyrighted) and picked because each needs the rule listed. Every
+one has exactly one solution.
 
 ## The model
 
@@ -353,11 +357,10 @@ Correctness is checked against ground truth, not self-consistency:
   `_xwing`, `_swordfish`, `_chains`) and Calcudokus must also show their
   named pattern in the log, and must stall when the ladder is cut just
   before their rule, so each example really exercises that rung.
-- `prrrdoku1-3.txt` are checked against the published solutions and the
-  puzzle's question (who is in Vladimir's region) in their source documents,
-  and the post-clue candidate lists are compared against the lists quoted in
-  each document's own worked solution. A mis-transcribed board fails the
-  tests rather than quietly solving a different puzzle.
+- `prrrdoku1-3.txt` are checked against the intended source solutions and the
+  answer to the question of who is in Vladimir's region. Tests cover the
+  unchanged candidate lists, the deliberate late-reveal changes, and the
+  final placement and companion.
 - Calcudoku solutions are also checked as properties: every row and column
   is a permutation, and every cage makes its target.
 

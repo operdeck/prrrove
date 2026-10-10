@@ -189,9 +189,9 @@ Numbers from actual runs, not estimates:
 | `futoshiki_5x5.txt` | solved, 49 iterations | `single` 25, `relations` 12, `chains` 8, `cover2` 3 |
 | `murdoku_intro.txt` | solved, 5 iterations | `single` 4 |
 | `murdoku_house.txt` | solved, 11 iterations | `single` 5, `relations` 4, `subsumption` 1 |
-| `prrrdoku1.txt` | solved, 14 iterations | `single` 7, `relations` 5, `subsumption` 1 |
-| `prrrdoku2.txt` | solved, 30 iterations | `single` 9, `relations` 8, `chains` 8, `cover2` 3, `cover3` 1 |
-| `prrrdoku3.txt` | solved, 39 iterations | `relations` 14, `single` 9, `subsumption` 7, `what_if` 6, `chains` 2 |
+| `prrrdoku1.txt` | solved, 14 iterations | `single` 7, `relations` 4, `subsumption` 2 |
+| `prrrdoku2.txt` | solved, 18 iterations | `single` 9, `relations` 8 |
+| `prrrdoku3.txt` | solved, 40 iterations | `single` 9, `relations` 18, `subsumption` 5, `cover2` 2, `what_if` 5 |
 | `calcudoku_4x4_easy.txt` | solved, 22 iterations | `single` 15, `relations` 6 |
 | `calcudoku_6x6_medium.txt` | solved, 57 iterations | `single` 35, `relations` 21 |
 | `calcudoku_6x6_hard.txt` | solved, 60 iterations | `single` 36, `relations` 20, `cover2` 3 |
@@ -209,16 +209,19 @@ by backtracking) and picked because each needs its rule: the tests cut the
 ladder just before it and assert the puzzle stalls. A single firing can
 unlock a whole puzzle, so the counts are small.
 
-On Prrrdoku 2, `cover3` is the document's step "Tim, Jos and Pip fill rows
-1-3, so Anna is outside them", and `cover2` is "Pip and Mao fill columns 8
-and 9". The document then splits on Otto's square; `chains` instead links
-Otto's two squares to Luna's and Tjitske's ("if Otto is not on r6c5, he is
-on r7c6, so Luna is not on r7c4 ..."). Different route, same answer.
+The late-reveal Prrrdokus preserve their original assignments while changing
+the board or clues so Vladimir is the final placement and her companion stays
+ambiguous until then. Puzzle 1 moves r4c2 from kampeerplek to speeltuin.
+Puzzle 2 adds `at_least Jos Mao 13`; this reduces its grade from `chains` to
+`relations`. Puzzle 3 moves r2c5 from Bankastraat to Helmholtzstraat and adds
+`within Mao Otto 6`. `--track-person Vladimir` traces the live square and
+region-overlap companion candidates; a regression test checks the final
+placement and ambiguity on all three.
 
-Prrrdoku 3 leans on `what_if` hardest (6 firings, 9 before chains). The
-document's own solution argues by cases there too ("Waar zit Anna?"). Its
-key clue, "Luna is furthest from Mao", is a three-person relation, which
-gives chains no weak links yet.
+Prrrdoku 3 still needs `what_if` (5 firings, after 34 earlier firings). The
+document's own solution argues by cases too ("Waar zit Anna?"). Its key clue,
+"Luna is furthest from Mao", is a three-person relation, which gives chains
+no weak links yet.
 
 ## Known gaps
 

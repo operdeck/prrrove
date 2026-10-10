@@ -1,10 +1,11 @@
 # Prrrdoku 3 - "Een dagje Amsterdam"  (9x9, eight regions)
 #
-# Board transcribed from the figure in prrrdokus/Prrrdoku 3.docx; colours matched to
-# names via the document's legend table. Cross-checked against the solution's
-# candidate lists: vuurtje's neighbours outside the water are r4c1, r5c2; the
+# Board based on the figure in prrrdokus/Prrrdoku 3.docx, with r2c5 moved from
+# Bankastraat to Helmholtzstraat for the late-reveal variant. Colours match the
+# document's legend table. Cross-checked against the solution's candidate lists:
+# vuurtje's neighbours outside the water are r4c1, r5c2; the
 # banks are r1c2, r1c3, r3c4, r3c5, r8c3, r8c4; a knight's move from klimwand
-# or boulder reaches r1c6, r3c6, r6c7, r6c9, r7c6, r9c6; seven free squares
+# or boulder reaches r1c6, r3c6, r6c7, r6c9, r7c6, r9c6; eight free squares
 # border a koffer in the koffer's own region; woonboot plus water has 19 free
 # squares.
 #
@@ -50,7 +51,7 @@ amsterdam
 
 Grid:
 d d d d d e a a a
-d d d e e e a a a
+d d d e d e a a a
 d d e e e c a a a
 f f f f c c c c c
 f f f f c c c c c
@@ -95,7 +96,8 @@ outside Tjitske water
 outside Vladimir water
 outside Mao water
 
-# Clues 1-13 from the document. Clue 14 is the question being asked.
+# Clues 1-13 from the document, plus a late-reveal clue (14).
+# Clue 15 is the question being asked.
 Clues:
 knight_from Tim klimwand boulder
 in_region Otto klimgebied kantoor
@@ -110,3 +112,4 @@ above Luna Jos
 at_least Tjitske Mao 10
 alone Luna
 furthest Luna Mao
+within Mao Otto 6

@@ -539,3 +539,48 @@ def _narrowed(board: Board, model: Model, steps: Sequence[Step]) -> list[str]:
 def open_squares(board: Board, model: Model) -> dict[str, list[Square]]:
     """Remaining candidate squares per person - the working set."""
     return {p: sorted(model.value_of(lit) for lit in model.options(p)) for p in board.people}
+
+
+def track_person_candidates(
+    board: Board, model: Model, person: str
+) -> tuple[list[Square], list[str]]:
+    """Return a person's live squares and conservative region-overlap companions."""
+    if person not in board.people:
+        raise ValueError(f"unknown person {person!r}; have {board.people}")
+
+    squares = open_squares(board, model)[person]
+    regions = {board.region_of(square) for square in squares}
+    companions = [
+        candidate
+        for candidate in board.people
+        if candidate != person
+        and any(board.region_of(model.value_of(lit)) in regions for lit in model.options(candidate))
+    ]
+    return squares, companions
+
+
+def track_person_status(board: Board, model: Model, person: str) -> str:
+    """Describe one person's live squares and region-overlap companions.
+
+    Companion names are a conservative domain-overlap diagnostic, not a test
+    that each person-square pair extends to a complete solution.
+    """
+    squares, companions = track_person_candidates(board, model, person)
+    regions = {board.region_of(square) for square in squares}
+    region_names = [name for rid, name in board.region_names.items() if rid in regions]
+
+    chosen = model.chosen(person)
+    if chosen is not None:
+        location = f"{chosen} ({board.region_names[board.region_of(chosen)]})"
+    elif not squares:
+        location = "no live squares"
+    elif len(squares) == 1:
+        square = squares[0]
+        location = f"1 square {square} ({board.region_names[board.region_of(square)]})"
+    else:
+        location = f"{len(squares)} squares in {', '.join(region_names)}"
+        if len(squares) <= 8:
+            location += f" [{', '.join(map(str, squares))}]"
+
+    possible = ", ".join(companions) or "none"
+    return f"  tracked {person}: {location}; region-overlap companions: {possible}"

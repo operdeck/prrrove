@@ -57,8 +57,8 @@ Vladimir
 Mao
 Luna
 
-# Clues 1-12 from the document. Clue 13 ("only one other in Vladimir's
-# region") is the question being asked.
+# Clues 1-12 from the document, plus a late-reveal distance clue (13).
+# Clue 14 ("only one other in Vladimir's region") is the question being asked.
 Clues:
 next_to Tim klimwand
 in_region Jos keukenwinkel
@@ -72,3 +72,4 @@ next_to Luna glijbaan
 alone Luna
 within Luna Tim 6
 apart Luna Mao
+at_least Jos Mao 13

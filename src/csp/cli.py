@@ -124,6 +124,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--step", "-s", action="store_true", help="redraw and pause after each deduction"
     )
+    parser.add_argument(
+        "--track-person",
+        metavar="PERSON",
+        help="Murdoku only: trace a person's live squares and region-overlap companions",
+    )
     parser.add_argument("--type", choices=["auto", *KINDS], default="auto")
     instead = parser.add_mutually_exclusive_group()
     instead.add_argument(
@@ -168,6 +173,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     model = puzzle.model
+    track_board: murdoku.Board | None = None
+    if args.track_person:
+        if kind != "murdoku":
+            parser.error("--track-person is only available for Murdoku")
+        if args.show_model or args.brute_force or args.explain or args.grade:
+            parser.error("--track-person requires a normal solve")
+        track_board, _ = load_board(text)
+        if args.track_person not in track_board.people:
+            parser.error(
+                f"unknown person {args.track_person!r}; have {', '.join(track_board.people)}"
+            )
     if args.grade:
         fired: list[str] = []
         result = Solver(model).solve(on_step=lambda rule, steps: fired.append(rule))
@@ -178,6 +194,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{len(model.relations)} relations"
     )
     print(puzzle.draw("Start"))
+    if args.track_person:
+        assert track_board is not None
+        print(murdoku.track_person_status(track_board, model, args.track_person))
     if args.png and not write_picture(kind, text, args.png):
         return 2
 
@@ -199,9 +218,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     def on_step(rule: str, steps: Sequence[Step]) -> None:
         used.append(rule)
-        if not (args.verbose or args.step):
+        if not (args.verbose or args.step or args.track_person):
             return
         narrate(rule, steps)
+        if args.track_person:
+            assert track_board is not None
+            print(murdoku.track_person_status(track_board, model, args.track_person))
         if args.step:
             print(puzzle.draw("After this step", steps))
             try:

@@ -101,6 +101,10 @@ uv run csp <file.txt> --grade
   generated puzzle, require a solved grade and compare it with the user's
   target. For a transcription, `unsolved` means this solver's deduction rules
   did not finish it; it does not mean the text file is malformed.
+- `--track-person` is for a normal Murdoku solve. For a late-reveal puzzle,
+  check that the tracked person has multiple live squares and multiple
+  region-overlap companion candidates until everyone else is placed, then
+  one square and one companion.
 - `--explain` can produce a worked solution when requested. Review it against
   the intended assignment and clue meanings. Use `--png <file.png>` when a
   board picture is requested.
@@ -126,6 +130,14 @@ it.
    `Furniture:`, and `Rules:` are optional.
 - Keep clues concise and non-duplicative. Avoid clues that directly reveal
   every person's square unless the user requests a very easy puzzle.
+- **Late-reveal mystery rule:** when the question asks who shares a region with
+  a named mystery person (for example, Vladimir), keep that person's square
+  open to at least two candidates until every other person is placed. Keep at
+  least two region-overlap companion candidates until that final placement,
+  then leave exactly one companion. Use `--track-person <person>` to inspect
+  the live solve trace. Its companion list is a conservative domain-overlap
+  check, not a proof of joint feasibility; confirm the final placement and
+  companion in the completed solve.
 
 ## Supported Clues
 
