@@ -27,4 +27,4 @@ venv/
 .DS_Store
 
 # Puzzle documents: kept local, never published
-prrrdokus/
+proprietary puzzles/

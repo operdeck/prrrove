@@ -96,10 +96,15 @@ PHRASES: dict[str, dict[str, str]] = {
         "clue.not_next_to": "{a} is not next to {things}",
         "clue.knight_from": "{a} is a knight's move from {things}",
         "clue.on": "{a} is on {things}",
+        "clue.not_on": "{a} is not on {things}",
+        "clue.only_on": "{a} is the only person on {things}",
+        "clue.in_corner": "{a} is in a corner of the grid",
         "clue.same_region": "{a} and {b} are in the same region",
         "clue.different_region": "{a} and {b} are in different regions",
         "clue.apart": "{a} and {b} are in regions that do not touch",
         "clue.left_of": "{a} is somewhere left of {b}",
+        "clue.left_of_one": "{a} is exactly one column left of {b}",
+        "clue.left_of_n": "{a} is exactly {n} columns left of {b}",
         "clue.exactly": "exactly {n} of these is true: {list}",
         "clue.above": "{a} is somewhere above {b}",
         "clue.above_n": "{a} is exactly {rows} above {b}",
@@ -165,10 +170,15 @@ PHRASES: dict[str, dict[str, str]] = {
         "clue.not_next_to": "{a} zit niet naast {things}",
         "clue.knight_from": "{a} staat een paardensprong van {things}",
         "clue.on": "{a} ligt op {things}",
+        "clue.not_on": "{a} zit niet op {things}",
+        "clue.only_on": "alleen {a} zit op {things}",
+        "clue.in_corner": "{a} staat in een hoek van het raster",
         "clue.same_region": "{a} en {b} zijn in hetzelfde gebied",
         "clue.different_region": "{a} en {b} zijn in verschillende gebieden",
         "clue.apart": "{a} en {b} zijn in gebieden die niet aan elkaar grenzen",
         "clue.left_of": "{a} is ergens links van {b}",
+        "clue.left_of_one": "{a} is precies één kolom links van {b}",
+        "clue.left_of_n": "{a} is precies {n} kolommen links van {b}",
         "clue.exactly": "precies {n} hiervan klopt: {list}",
         "clue.above": "{a} is ergens boven {b}",
         "clue.above_n": "{a} is precies {rows} boven {b}",
@@ -256,7 +266,10 @@ class Places:
     def thing(self, name: str) -> str:
         if name in self.say.words:
             return self.say.words[name]
-        many = len(_pieces(self.board.squares_of([name]))) > 1
+        if name in self.board.doors:
+            many = len(self.board.doors[name]) > 1
+        else:
+            many = len(_pieces(self.board.squares_of([name]))) > 1
         return self.say("a" if many else "the", name=name.replace("_", " "))
 
     def where_regions(self, names: Iterable[str]) -> str:
@@ -732,11 +745,17 @@ class Story:
             )
             return self.say("clue.exactly", n=self.say.number(n), list=listed)
         fields: dict[str, Any] = dict(zip("abc", people, strict=False))
-        rest = args[1:] if kind in FILTERS else ()
+        rest = args[1:] if kind in FILTERS or kind == "only_on" else ()
         if kind in ("in_region", "outside"):
             fields["where"] = self.places.where_regions(rest)
         elif rest:
             fields["things"] = self.say.join([self.places.thing(t) for t in rest], "or")
+        if kind == "only_on":
+            fields["a"] = args[0]
+        if kind == "left_of" and len(args) > 2:
+            distance = int(args[2])
+            fields["n"] = self.say.number(distance)
+            kind = "left_of_one" if distance == 1 else "left_of_n"
         if kind == "above" and len(args) > 2:
             n = int(args[2])
             kind = "above_n"

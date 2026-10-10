@@ -1,7 +1,7 @@
 """Tests for the exact-cover engine and both puzzle compilers.
 
 The Murdoku cases check against the published solution and candidate lists in
-the documents in prrrdokus/, so a wrong board transcription fails here rather than quietly
+the documents in proprietary puzzles/, so a wrong board transcription fails here rather than quietly
 solving some other puzzle.
 """
 
@@ -381,9 +381,88 @@ def _one_region_board(size: int, people: list[str], objects=None, **extra) -> mu
     return murdoku.Board(size, grid, {"a": "here"}, objects or {}, people, **extra)
 
 
-def test_people_count_must_match_board_size():
+def test_people_count_cannot_exceed_board_size():
     with pytest.raises(ValueError):
-        _one_region_board(3, ["only", "two"])
+        _one_region_board(3, ["one", "two", "three", "four"])
+
+
+def test_sparse_board_allows_empty_rows_and_columns():
+    board = _one_region_board(4, ["Ada", "Ben", "Vic"])
+    model = murdoku.compile_puzzle(board, [])
+    line_rules = [rule for rule in murdoku.board_rules(board) if rule.about[0] in {"row", "col"}]
+    assert len(model.variables) == 3
+    assert len(line_rules) == 8
+    assert all(rule.kind is Kind.AT_MOST_ONE for rule in line_rules)
+
+
+def test_sparse_murdoku_mystery_example_solves_unique_murderer():
+    text = (EXAMPLES / "murdoku_sparse_mystery.txt").read_text()
+    board, clues = load_board(text)
+    model = murdoku.compile_puzzle(board, clues)
+    result = Solver(model).solve()
+    (expected,) = bruteforce.solutions(text, "murdoku", limit=2)
+
+    assert result.solved and result.assignment == expected
+    assert {person: str(square) for person, square in result.assignment.items()} == {
+        "Mara": "r1c2",
+        "Nico": "r2c3",
+        "Ria": "r4c4",
+        "Tomas": "r5c5",
+    }
+    victim_region = board.region_of(result.assignment["Tomas"])
+    companions = [
+        person
+        for person, square in result.assignment.items()
+        if person != "Tomas" and board.region_of(square) == victim_region
+    ]
+    assert companions == ["Ria"]
+    assert len({square.row for square in result.assignment.values()}) == 4
+    assert len({square.col for square in result.assignment.values()}) == 4
+
+
+def test_region_groups_and_board_rules_encode_character_roles():
+    text = "\n".join(
+        [
+            "Size: 4",
+            "Regions:",
+            "a: village",
+            "b: noble",
+            "Grid:",
+            "b b a a",
+            "b a a a",
+            "a a b a",
+            "a a a b",
+            "People:",
+            "Anna",
+            "Betsy",
+            "Eli",
+            "Groups:",
+            "noble_areas: noble",
+            "Rules:",
+            "in_region Anna noble_areas",
+            "outside Betsy noble_areas",
+            "",
+        ]
+    )
+    board, clues = load_board(text)
+    model = murdoku.compile_puzzle(board, clues)
+    assert all(board.region_of(model.value_of(lit)) == "b" for lit in model.options("Anna"))
+    assert all(board.region_of(model.value_of(lit)) != "b" for lit in model.options("Betsy"))
+    assert len(model.options("Eli")) == len(board.free)
+
+
+def test_exactly_one_noblewoman_one_row_above_eli():
+    board = _one_region_board(4, ["Anna", "Betsy", "Eli", "Dean"])
+    clue = (
+        "exactly",
+        ["1", "above", "Anna", "Eli", "1", ";", "above", "Betsy", "Eli", "1"],
+    )
+    (condition,) = murdoku.conditions(board, [clue])
+    square = murdoku.Square
+    assert condition.people == ("Anna", "Eli", "Betsy")
+    assert condition.test(square(0, 0), square(1, 1), square(2, 2))
+    assert condition.test(square(0, 0), square(3, 1), square(2, 2))
+    assert not condition.test(square(0, 0), square(2, 1), square(3, 2))
 
 
 def test_relations_prunes_a_whole_relation_in_one_step():
@@ -602,6 +681,69 @@ def test_furniture_can_be_stood_on_and_objects_cannot():
     assert board.free == [sq(0, 1), sq(1, 0), sq(1, 1)]
     model = murdoku.compile_puzzle(board, [("on", ["A", "bank"])])
     assert sorted(model.value_of(lit) for lit in model.options("A")) == [sq(1, 0), sq(1, 1)]
+
+
+def test_next_to_door_allows_either_cell_on_its_boundary():
+    text = """Size: 2
+Regions:
+a: west
+b: east
+Grid:
+a b
+a b
+People:
+A
+B
+Doors:
+gate: r1c1-r1c2
+Clues:
+next_to A gate
+"""
+    board, clues = load_board(text)
+    model = murdoku.compile_puzzle(board, clues)
+    assert board.doors["gate"] == [(murdoku.Square(0, 0), murdoku.Square(0, 1))]
+    assert {model.value_of(lit) for lit in model.options("A")} == {
+        murdoku.Square(0, 0),
+        murdoku.Square(0, 1),
+    }
+
+
+def test_not_on_excludes_a_furniture_set():
+    sq = murdoku.Square
+    board = _one_region_board(3, ["A", "B", "C"], furniture={"chair": [sq(0, 0), sq(0, 1)]})
+    model = murdoku.compile_puzzle(board, [("not_on", ["A", "chair"])])
+    assert all(model.value_of(lit) not in board.furniture["chair"] for lit in model.options("A"))
+
+
+def test_only_on_furniture_excludes_everyone_else_from_the_set():
+    sq = murdoku.Square
+    board = _one_region_board(3, ["A", "B", "C"], furniture={"bed": [sq(0, 0), sq(0, 1)]})
+    model = murdoku.compile_puzzle(board, [("only_on", ["A", "bed"])])
+    assert {model.value_of(lit) for lit in model.options("A")} == set(board.furniture["bed"])
+    assert all(
+        model.value_of(lit) not in board.furniture["bed"]
+        for person in ("B", "C")
+        for lit in model.options(person)
+    )
+
+
+def test_in_corner_filters_to_the_four_grid_corners():
+    board = _one_region_board(4, ["A", "B", "C"])
+    model = murdoku.compile_puzzle(board, [("in_corner", ["A"])])
+    assert {model.value_of(lit) for lit in model.options("A")} == {
+        murdoku.Square(0, 0),
+        murdoku.Square(0, 3),
+        murdoku.Square(3, 0),
+        murdoku.Square(3, 3),
+    }
+
+
+def test_left_of_can_require_an_exact_column_gap():
+    board = _one_region_board(4, ["A", "B", "C", "D"])
+    model = murdoku.compile_puzzle(board, [("left_of", ["A", "B", "1"])])
+    (relation,) = model.relations
+    assert relation.holds(murdoku.Square(0, 0), murdoku.Square(1, 1))
+    assert not relation.holds(murdoku.Square(0, 0), murdoku.Square(1, 2))
 
 
 def test_knight_move_and_shared_object_names():

@@ -1,9 +1,9 @@
 """Murdoku expressed as exact cover.
 
 The variables are *people*, not squares: each person picks one square. That
-is the shape the puzzle actually has - "exactly one figure per row and per
-column" puts seven figures on a 7x7 board, it does not fill every row with
-all seven.
+is the shape the puzzle actually has: at most one figure per row and column.
+When the number of people matches the board width, every row and column is
+occupied; on larger boards, some may stay empty.
 
 Literals are "person stands on square". The constraint families:
   * each person stands on exactly one square
@@ -64,8 +64,9 @@ class Board:
     `regions` holds a short region id per square (a letter, say) and
     `region_names` maps each id to its name. `objects` block their squares;
     `furniture` (such as a bank to lie on) does not. Several things may share
-    a name, like three suitcases. `colours` (region id -> '#RRGGBB') and
-    `hatched` (region ids) only affect pictures.
+    a name, like three suitcases. `doors` maps names to edges between adjacent
+    cells in different regions; a door is not itself a square. `colours`
+    (region id -> '#RRGGBB') and `hatched` (region ids) only affect pictures.
 
     `rules` are clues that come with the board rather than the puzzle, such
     as "only Luna can be in the water"; they are not numbered.
@@ -81,14 +82,15 @@ class Board:
     colours: dict[str, str] = field(default_factory=dict)
     hatched: set[str] = field(default_factory=set)
     rules: list["Clue"] = field(default_factory=list)
+    doors: dict[str, list[tuple[Square, Square]]] = field(default_factory=dict)
     free: list[Square] = field(init=False)
     borders: set[frozenset[str]] = field(init=False)
 
     def __post_init__(self) -> None:
-        if len(self.people) != self.size:
+        if not self.people or len(self.people) > self.size:
             raise ValueError(
                 f"{len(self.people)} people on a {self.size}x{self.size} board; "
-                "one per row and column means these must match"
+                f"the number of people must be between 1 and {self.size}"
             )
         squares = [Square(r, c) for r in range(self.size) for c in range(self.size)]
         self.free = [sq for sq in squares if sq not in self.blocked]
@@ -100,6 +102,21 @@ class Board:
             and nb.col < self.size
             and self.region_of(sq) != self.region_of(nb)
         }
+        if door_names := set(self.doors) & (set(self.objects) | set(self.furniture)):
+            raise ValueError(f"door names overlap objects or furniture: {sorted(door_names)}")
+        for name, edges in self.doors.items():
+            if not edges:
+                raise ValueError(f"door {name!r} has no edges")
+            for first, second in edges:
+                if any(
+                    square.row not in range(self.size) or square.col not in range(self.size)
+                    for square in (first, second)
+                ):
+                    raise ValueError(f"door {name!r} is off the grid: {first}-{second}")
+                if steps_between(first, second) != 1:
+                    raise ValueError(f"door {name!r} must separate neighboring squares")
+                if self.region_of(first) == self.region_of(second):
+                    raise ValueError(f"door {name!r} must be on a region boundary")
 
     def region_of(self, square: Square) -> str:
         return self.regions[square.row][square.col]
@@ -156,11 +173,26 @@ def _outside(board: Board, *names: str) -> SquareTest:
 
 def _next_to(board: Board, *things: str) -> SquareTest:
     """Beside one of the things, in the same region: Murdoku's general rule is
-    that 'next to' never crosses a region boundary."""
-    targets = board.squares_of(things)
-    return lambda sq: any(
-        steps_between(sq, t) == 1 and board.region_of(t) == board.region_of(sq) for t in targets
-    )
+    that 'next to' never crosses a region boundary. A door is an edge, so
+    either square on its sides counts, even across a region boundary."""
+    targets: set[Square] = set()
+    doors: set[tuple[Square, Square]] = set()
+    for thing in things:
+        if thing in board.doors:
+            doors.update(board.doors[thing])
+        else:
+            targets.update(board.squares_of([thing]))
+
+    def test(square: Square) -> bool:
+        beside_door = any(square in edge for edge in doors)
+        beside_thing = any(
+            steps_between(square, target) == 1
+            and board.region_of(target) == board.region_of(square)
+            for target in targets
+        )
+        return beside_door or beside_thing
+
+    return test
 
 
 def _knight_from(board: Board, *things: str) -> SquareTest:
@@ -176,6 +208,21 @@ def _not_next_to(board: Board, *things: str) -> SquareTest:
 def _on(board: Board, *things: str) -> SquareTest:
     targets = board.squares_of(things)
     return lambda sq: sq in targets
+
+
+def _not_on(board: Board, *things: str) -> SquareTest:
+    targets = board.squares_of(things)
+    return lambda sq: sq not in targets
+
+
+def _in_corner(board: Board) -> SquareTest:
+    corners = {
+        Square(0, 0),
+        Square(0, board.size - 1),
+        Square(board.size - 1, 0),
+        Square(board.size - 1, board.size - 1),
+    }
+    return lambda sq: sq in corners
 
 
 def _same_region(board: Board) -> PairTest:
@@ -194,7 +241,12 @@ def _apart(board: Board) -> PairTest:
     return test
 
 
-def _left_of(board: Board) -> PairTest:
+def _left_of(board: Board, columns: str | None = None) -> PairTest:
+    if columns is not None:
+        gap = int(columns)
+        if gap < 1:
+            raise ValueError("left_of column gap must be at least 1")
+        return lambda a, b: a.col + gap == b.col
     return lambda a, b: a.col < b.col
 
 
@@ -222,6 +274,8 @@ FILTERS: dict[str, Callable[..., SquareTest]] = {
     "not_next_to": _not_next_to,  # not_next_to <person> <thing>...: beside none of them
     "knight_from": _knight_from,  # knight_from <person> <thing>...: a knight's move away
     "on": _on,  # on <person> <furniture>...
+    "not_on": _not_on,  # not_on <person> <furniture>...
+    "in_corner": _in_corner,  # in_corner <person>
 }
 
 RELATIONS: dict[str, Callable[..., PairTest]] = {
@@ -229,7 +283,7 @@ RELATIONS: dict[str, Callable[..., PairTest]] = {
     "same_region": _same_region,  # same_region <a> <b>
     "different_region": _different_region,  # different_region <a> <b>
     "apart": _apart,  # apart <a> <b>: different regions that do not border
-    "left_of": _left_of,  # left_of <a> <b>: a somewhere left of b
+    "left_of": _left_of,  # left_of <a> <b> [n]: somewhere left, or exactly n columns left
     "above": _above,  # above <a> <b> [n]: exactly n rows above, or anywhere above
     "within": _within,  # within <a> <b> <n>: at most n steps apart
     "at_least": _at_least,  # at_least <a> <b> <n>: at least n steps apart
@@ -296,6 +350,26 @@ def conditions(board: Board, clues: Iterable[Clue]) -> list[Condition]:
 def _conditions(board: Board, kind: str, args: list[str], number: int | None) -> list[Condition]:
     if kind == COUNTING:
         return [_counting(board, args, number)]
+    if kind == "only_on":
+        if len(args) < 2:
+            raise ValueError("only_on needs a person and at least one furniture name")
+        person, *furniture = args
+        if person not in board.people:
+            raise ValueError(f"clue only_on {' '.join(args)} names unknown person {person!r}")
+        unknown = set(furniture) - set(board.furniture)
+        if unknown:
+            raise ValueError(f"only_on needs furniture; unknown furniture {sorted(unknown)}")
+        targets = board.squares_of(furniture)
+        label = " ".join([kind, *args])
+        conditions = [
+            Condition(label, (person,), lambda sq: sq in targets, kind, tuple(args), number)
+        ]
+        conditions.extend(
+            Condition(label, (other,), lambda sq: sq not in targets, kind, tuple(args), number)
+            for other in board.people
+            if other != person
+        )
+        return conditions
     arity = 1 if kind in FILTERS else 2 if kind in RELATIONS else GROUP_CLUES.get(kind)
     if arity is None:
         raise ValueError(f"unknown clue {kind!r}")
@@ -398,6 +472,8 @@ class BoardRule:
 
 def board_rules(board: Board) -> list[BoardRule]:
     people, free = board.people, board.free
+    line_kind = Kind.EXACTLY_ONE if len(people) == board.size else Kind.AT_MOST_ONE
+    line_capacity = "one person" if line_kind is Kind.EXACTLY_ONE else "at most one person"
     rules = [
         BoardRule(
             f"{p} stands somewhere",
@@ -421,9 +497,9 @@ def board_rules(board: Board) -> list[BoardRule]:
     for line, word in (("row", "row"), ("col", "column")):
         rules += [
             BoardRule(
-                f"{line} {i + 1} holds one person",
-                Kind.EXACTLY_ONE,
-                f"each {word} holds one person",
+                f"{line} {i + 1} holds {line_capacity}",
+                line_kind,
+                f"each {word} holds {line_capacity}",
                 (line, i),
                 tuple(
                     (p, sq)
@@ -514,6 +590,12 @@ def render(board: Board, model: Model, title: str, steps: Sequence[Step] = ()) -
                 for name, squares in sorted(things.items())
             )
             out.append(f"  {label}: {listed}")
+    if board.doors:
+        listed = ", ".join(
+            f"{name} {' '.join(f'{first}-{second}' for first, second in edges)}"
+            for name, edges in sorted(board.doors.items())
+        )
+        out.append(f"  doors (between cells): {listed}")
     return "\n".join(out)
 
 

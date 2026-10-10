@@ -80,21 +80,34 @@ def murdoku_picture(
         cell,
         lambda a, b: board.regions[a[0]][a[1]] == board.regions[b[0]][b[1]],
     )
+    _door_edges(draw, board, margin, cell)
 
     for name, squares in board.objects.items():
-        for sq in squares:
-            _icon(image, draw, name, box(sq), cell)
+        if name == "waterput":
+            for piece in _pieces(squares):
+                x0, y0, _, _ = box(min(piece))
+                _, _, x1, y1 = box(max(piece))
+                _draw_water_well(draw, (x0, y0, x1, y1))
+        else:
+            for sq in squares:
+                _icon(image, draw, name, box(sq), cell)
     occupied = set((placed or {}).values())
     for name, squares in board.furniture.items():
-        for piece in _pieces(squares):
+        pieces = (
+            [[sq] for sq in squares]
+            if icons.code_for(name) == icons.code_for("chair")
+            else _pieces(squares)
+        )
+        for piece in pieces:
             x0, y0, _, _ = box(min(piece))
             _, _, x1, y1 = box(max(piece))
             stretch = len(piece) > 1
+            rotate = name.rstrip("0123456789").rstrip("_").lower() == "bed" and y1 - y0 > x1 - x0
             if occupied & set(piece) and not stretch:
                 y1 = y0 + int(cell * 0.62)  # leave room for the name tag below
-                _icon(image, draw, name, (x0, y0, x1, y1), cell, scale=0.95)
+                _icon(image, draw, name, (x0, y0, x1, y1), cell, scale=0.95, rotate=rotate)
             else:
-                _icon(image, draw, name, (x0, y0, x1, y1), cell, stretch=stretch)
+                _icon(image, draw, name, (x0, y0, x1, y1), cell, stretch=stretch, rotate=rotate)
     furnished = board.squares_of(board.furniture)
     for person, sq in (placed or {}).items():
         _name_tag(draw, person, box(sq), cell, low=sq in furnished)
@@ -335,6 +348,22 @@ def _walls(
     draw.rectangle((low, low, high, high), outline=INK, width=thick)
 
 
+def _door_edges(draw: ImageDraw.ImageDraw, board: Board, margin: int, cell: int) -> None:
+    """Mark each door on the shared edge between its two cells."""
+    wood = (117, 75, 47)
+    width = max(4, cell // 10)
+    for edges in board.doors.values():
+        for first, second in edges:
+            if first.row == second.row:
+                x = margin + max(first.col, second.col) * cell
+                y = margin + first.row * cell + cell // 2
+                draw.line((x, y - cell // 4, x, y + cell // 4), fill=wood, width=width)
+            else:
+                x = margin + first.col * cell + cell // 2
+                y = margin + max(first.row, second.row) * cell
+                draw.line((x - cell // 4, y, x + cell // 4, y), fill=wood, width=width)
+
+
 def _pieces(squares: Iterable[Square]) -> list[list[Square]]:
     """Group squares of one furniture name into connected pieces."""
     remaining = set(squares)
@@ -369,9 +398,14 @@ def _icon(
     cell: int,
     scale: float = 0.72,
     stretch: bool = False,
+    rotate: bool = False,
 ) -> None:
     """Draw `name`'s icon centred in `area`; `stretch` fills the area instead."""
     x0, y0, x1, y1 = area
+    normalized = name.rstrip("0123456789").rstrip("_").lower()
+    if normalized == "tapijt":
+        _draw_carpet(draw, area)
+        return
     path = icons.icon(name)
     if path is None:
         _centred_text(draw, name[:6], area, cell // 5, INK)
@@ -380,6 +414,8 @@ def _icon(
     fix = ICON_FIXES.get(icons.code_for(name) or "")
     if fix:
         picture = fix(picture)
+    if rotate:
+        picture = picture.rotate(90, expand=True)
     if stretch:
         picture = picture.crop(picture.getchannel("A").getbbox())
         pad = cell // 10
@@ -391,6 +427,70 @@ def _icon(
     left = x0 + (x1 - x0 - picture.width) // 2
     top = y0 + (y1 - y0 - picture.height) // 2
     image.paste(picture, (left, top), picture)
+
+
+def _draw_carpet(draw: ImageDraw.ImageDraw, area: Box) -> None:
+    """Draw a patterned rug that reads clearly at a single-cell size."""
+    x0, y0, x1, y1 = area
+    width, height = x1 - x0, y1 - y0
+    pad = max(3, min(width, height) // 12)
+    bounds = (x0 + pad, y0 + pad, x1 - pad, y1 - pad)
+    red, gold, dark = (156, 58, 45), (231, 190, 89), (79, 45, 43)
+    draw.rounded_rectangle(bounds, radius=pad, fill=red, outline=dark, width=max(2, pad // 2))
+    inner_pad = max(3, pad // 2)
+    inner = (
+        bounds[0] + inner_pad,
+        bounds[1] + inner_pad,
+        bounds[2] - inner_pad,
+        bounds[3] - inner_pad,
+    )
+    draw.rectangle(inner, outline=gold, width=max(2, pad // 2))
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    diamond = max(3, min(width, height) // 5)
+    draw.polygon(
+        [(cx, cy - diamond), (cx + diamond, cy), (cx, cy + diamond), (cx - diamond, cy)],
+        fill=gold,
+        outline=dark,
+    )
+    center = max(1, diamond // 3)
+    draw.ellipse((cx - center, cy - center, cx + center, cy + center), fill=red)
+
+
+def _draw_water_well(draw: ImageDraw.ImageDraw, area: Box) -> None:
+    """Draw a stone well with dark water and a simple timber frame."""
+    x0, y0, x1, y1 = area
+    width, height = x1 - x0, y1 - y0
+    stone, edge, wood, water = (137, 139, 132), (55, 57, 55), (111, 72, 48), (45, 65, 70)
+    pad = max(5, min(width, height) // 12)
+    rim = (x0 + pad, y0 + height // 2, x1 - pad, y1 - pad)
+    draw.ellipse(rim, fill=stone, outline=edge, width=max(3, pad // 2))
+    inset_x, inset_y = width // 5, height // 7
+    pool = (rim[0] + inset_x, rim[1] + inset_y, rim[2] - inset_x, rim[3] - inset_y)
+    draw.ellipse(pool, fill=water, outline=edge, width=max(2, pad // 3))
+    post_width = max(4, width // 12)
+    post_top, post_bottom = y0 + height // 8, y0 + height * 2 // 3
+    left_post = (x0 + width // 4, post_top, x0 + width // 4 + post_width, post_bottom)
+    right_post = (x1 - width // 4 - post_width, post_top, x1 - width // 4, post_bottom)
+    draw.rectangle(left_post, fill=wood, outline=edge, width=2)
+    draw.rectangle(right_post, fill=wood, outline=edge, width=2)
+    beam_y = y0 + height // 6
+    draw.rectangle(
+        (
+            left_post[0] - post_width // 2,
+            beam_y,
+            right_post[2] + post_width // 2,
+            beam_y + post_width,
+        ),
+        fill=wood,
+        outline=edge,
+        width=2,
+    )
+    rope_x = x0 + width // 2
+    draw.line(
+        (rope_x, beam_y + post_width, rope_x, pool[1] + height // 8),
+        fill=(225, 207, 155),
+        width=max(2, pad // 3),
+    )
 
 
 def _drop_floor_lamp(picture: Image.Image) -> Image.Image:
@@ -460,7 +560,8 @@ class _Legend:
         self.swatch = cell // 3
         self.line = int(self.swatch * 1.6)
         self.rows = (len(board.region_names) + 1) // 2
-        self.height = self.rows * self.line + cell // 2
+        self.door_rows = len(board.doors)
+        self.height = (self.rows + self.door_rows) * self.line + cell // 2
 
     def draw(self, image: Image.Image, draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
         fills = _fills(self.board)
@@ -481,3 +582,17 @@ class _Legend:
             label = name.replace("_", " ").capitalize()
             draw.text((left + self.swatch + self.swatch // 2, top + self.swatch / 2),
                       label, fill=INK, font=font, anchor="lm")  # fmt: skip
+        for i, name in enumerate(sorted(self.board.doors)):
+            top = y + (self.rows + i) * self.line
+            draw.line(
+                (x, top + self.swatch // 2, x + self.swatch, top + self.swatch // 2),
+                fill=(117, 75, 47),
+                width=max(4, self.swatch // 5),
+            )
+            draw.text(
+                (x + self.swatch + self.swatch // 2, top + self.swatch / 2),
+                f"Door: {name}",
+                fill=INK,
+                font=font,
+                anchor="lm",
+            )

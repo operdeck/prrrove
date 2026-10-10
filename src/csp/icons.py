@@ -26,11 +26,13 @@ CATALOGUE: dict[str, str] = {
     "bloem": "1f337", "flower": "1f337",
     "paddenstoel": "1f344", "mushroom": "1f344",
     "boulder": "1faa8", "rots": "1faa8", "rock": "1faa8",
+    "paard": "1f40e", "horse": "1f40e",
     "vuurtje": "1f525", "kampvuur": "1f525", "campfire": "1f525", "fire": "1f525",
     "tent": "26fa",
     "parasol": "26f1", "umbrella": "26f1",
     "fontein": "26f2", "fountain": "26f2",
     "vijver": "1fab7", "pond": "1fab7",
+    "ton": "1f6e2", "barrel": "1f6e2",
     "standbeeld": "1f5ff", "statue": "1f5ff",
     "glijbaan": "1f6dd", "slide": "1f6dd",
     "klimwand": "1f9d7", "climbing_wall": "1f9d7",
@@ -61,6 +63,7 @@ CATALOGUE: dict[str, str] = {
     "kookeiland": "1f373", "fornuis": "1f373", "stove": "1f373",
     "kombuis": "1f372", "galley": "1f372",
     "koffer": "1f9f3", "suitcase": "1f9f3",
+    "kruik": "1f3fa", "amphora": "1f3fa", "vase": "1f3fa",
 }  # fmt: skip
 
 
