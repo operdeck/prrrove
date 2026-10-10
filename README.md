@@ -197,7 +197,7 @@ file cannot be read.
 | `murdoku_intro.txt` | `single` only: the 4×4 first case above |
 | `murdoku_house.txt` | `relations`, `subsumption`: a 5×5 using "not next to" and a counting clue |
 | `prrrdoku1.txt` | `relations`, `subsumption` |
-| `prrrdoku2.txt` | `relations` |
+| `prrrdoku2.txt` | `what_if` |
 | `prrrdoku3.txt` | `what_if` |
 | `calcudoku_4x4_easy.txt`, `calcudoku_6x6_medium.txt` | `relations` (cage arithmetic) |
 | `calcudoku_6x6_hard.txt` | `cover2` |

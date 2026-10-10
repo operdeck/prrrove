@@ -153,7 +153,8 @@ def test_counting_clue_is_worded_and_known_placements_are_not_bold_again():
 
 def test_chains_are_told_as_if_then_with_the_reason_for_each_link():
     text = (EXAMPLES / "prrrdoku2.txt").read_text()
-    story = explain(text.replace("at_least Jos Mao 13\n", ""))
+    original_clues = text.replace("above Anna Mao 5\n", "in_region Jos keukenwinkel\n")
+    story = explain(original_clues.replace("at_least Jos Mao 13\n", ""))
     assert (
         "Als Otto niet op r6k5 zit, dan zit Otto op r7k6, dan zit Luna niet op r7k4 (rij 7), "
         "dan zit Luna op r8k3. Dus Otto zit op r6k5 of Luna zit op r8k3; hoe dan ook"

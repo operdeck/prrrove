@@ -57,11 +57,11 @@ Vladimir
 Mao
 Luna
 
-# Clues 1-12 from the document, plus a late-reveal distance clue (13).
+# Clue 2 is replaced with a relative-position clue; clue 13 keeps the late reveal.
 # Clue 14 ("only one other in Vladimir's region") is the question being asked.
 Clues:
 next_to Tim klimwand
-in_region Jos keukenwinkel
+above Anna Mao 5
 same_region Anna Jos
 in_region Pip moestuin
 next_to Otto bank

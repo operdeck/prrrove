@@ -190,7 +190,7 @@ Numbers from actual runs, not estimates:
 | `murdoku_intro.txt` | solved, 5 iterations | `single` 4 |
 | `murdoku_house.txt` | solved, 11 iterations | `single` 5, `relations` 4, `subsumption` 1 |
 | `prrrdoku1.txt` | solved, 14 iterations | `single` 7, `relations` 4, `subsumption` 2 |
-| `prrrdoku2.txt` | solved, 18 iterations | `single` 9, `relations` 8 |
+| `prrrdoku2.txt` | solved, 27 iterations | `single` 9, `relations` 14, `chains` 2, `what_if` 1 |
 | `prrrdoku3.txt` | solved, 40 iterations | `single` 9, `relations` 18, `subsumption` 5, `cover2` 2, `what_if` 5 |
 | `calcudoku_4x4_easy.txt` | solved, 22 iterations | `single` 15, `relations` 6 |
 | `calcudoku_6x6_medium.txt` | solved, 57 iterations | `single` 35, `relations` 21 |
@@ -212,11 +212,13 @@ unlock a whole puzzle, so the counts are small.
 The late-reveal Prrrdokus preserve their original assignments while changing
 the board or clues so Vladimir is the final placement and her companion stays
 ambiguous until then. Puzzle 1 moves r4c2 from kampeerplek to speeltuin.
-Puzzle 2 adds `at_least Jos Mao 13`; this reduces its grade from `chains` to
-`relations`. Puzzle 3 moves r2c5 from Bankastraat to Helmholtzstraat and adds
+Puzzle 2 replaces `in_region Jos keukenwinkel` with `above Anna Mao 5` and
+retains `at_least Jos Mao 13`; it needs `what_if` and keeps Vladimir last.
+Puzzle 3 moves r2c5 from Bankastraat to Helmholtzstraat, moves r1c6 and r2c6
+from Bankastraat to Klimgebied Noord to keep Bankastraat connected, and adds
 `within Mao Otto 6`. `--track-person Vladimir` traces the live square and
-region-overlap companion candidates; a regression test checks the final
-placement and ambiguity on all three.
+region-overlap companion candidates; regression tests check the final
+placement, ambiguity and connected region.
 
 Prrrdoku 3 still needs `what_if` (5 firings, after 34 earlier firings). The
 document's own solution argues by cases too ("Waar zit Anna?"). Its key clue,

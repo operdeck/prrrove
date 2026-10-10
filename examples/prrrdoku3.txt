@@ -1,8 +1,9 @@
 # Prrrdoku 3 - "Een dagje Amsterdam"  (9x9, eight regions)
 #
-# Board based on the figure in prrrdokus/Prrrdoku 3.docx, with r2c5 moved from
-# Bankastraat to Helmholtzstraat for the late-reveal variant. Colours match the
-# document's legend table. Cross-checked against the solution's candidate lists:
+# Board based on the figure in prrrdokus/Prrrdoku 3.docx. For the late-reveal
+# variant, r2c5 moves to Helmholtzstraat, and r1c6/r2c6 move to Klimgebied Noord
+# so Bankastraat remains connected. Colours match the document's legend table.
+# Cross-checked against the solution's candidate lists:
 # vuurtje's neighbours outside the water are r4c1, r5c2; the
 # banks are r1c2, r1c3, r3c4, r3c5, r8c3, r8c4; a knight's move from klimwand
 # or boulder reaches r1c6, r3c6, r6c7, r6c9, r7c6, r9c6; eight free squares
@@ -50,8 +51,8 @@ Hatched:
 amsterdam
 
 Grid:
-d d d d d e a a a
-d d d e d e a a a
+d d d d d a a a a
+d d d e d a a a a
 d d e e e c a a a
 f f f f c c c c c
 f f f f c c c c c

@@ -466,7 +466,7 @@ def test_prrrdoku2_region_borders_match_the_document():
 
 
 def test_prrrdoku3_candidate_lists_after_late_reveal_board_change():
-    """The region tweak adds r2c5 to Anna's starting candidates."""
+    """The connected-region redesign retains the late-reveal candidate lists."""
     board, model = _load("prrrdoku3.txt")
     open_sq = _open(board, model)
     assert open_sq["Tjitske"] == ["r4c1", "r5c2"]
@@ -475,6 +475,26 @@ def test_prrrdoku3_candidate_lists_after_late_reveal_board_change():
     assert len(open_sq["Anna"]) == 8
     assert "r2c5" in open_sq["Anna"]
     assert len(open_sq["Luna"]) == 19
+
+
+def test_prrrdoku3_bankastraat_is_connected():
+    board, _ = _load("prrrdoku3.txt")
+    region = board.region_id("bankastraat")
+    cells = {
+        (row, col)
+        for row in range(board.size)
+        for col in range(board.size)
+        if board.regions[row][col] == region
+    }
+    reached = {next(iter(cells))}
+    pending = list(reached)
+    while pending:
+        row, col = pending.pop()
+        for neighbor in ((row - 1, col), (row + 1, col), (row, col - 1), (row, col + 1)):
+            if neighbor in cells and neighbor not in reached:
+                reached.add(neighbor)
+                pending.append(neighbor)
+    assert reached == cells
 
 
 PUBLISHED = {
@@ -527,11 +547,11 @@ def test_later_prrrdokus_reach_the_published_solution(name):
     ] == company
 
 
-def test_prrrdoku2_late_reveal_variant_solves_before_chains():
-    """The added clue preserves the answer and lets cheaper rules finish."""
+def test_prrrdoku2_still_needs_what_if():
+    """The clue replacement preserves the answer and late reveal, but needs what-if."""
     _, model = _load("prrrdoku2.txt")
-    result = Solver(model, _before("chains")).solve()
-    assert result.solved
+    result = Solver(model, _before("what_if")).solve()
+    assert not result.solved and result.contradiction is None
 
 
 def test_prrrdoku3_still_needs_what_if():
@@ -953,7 +973,7 @@ def test_grade_is_the_hardest_rung_used():
         ("sudoku_pointing.txt", "subsumption"),
         ("sudoku_swordfish.txt", "cover3"),
         ("sudoku_chains.txt", "chains"),
-        ("prrrdoku2.txt", "relations"),
+        ("prrrdoku2.txt", "what_if"),
         ("prrrdoku3.txt", "what_if"),
     ],
 )
