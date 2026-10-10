@@ -80,6 +80,7 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
     furniture = _placements(section.get("Furniture", []))
     if overlap := _overlap(objects, furniture):
         raise ValueError(f"furniture placed on an object at {sorted(overlap)}")
+    doors = _door_placements(section.get("Doors", []))
 
     people = list(section["People"])
 
@@ -90,7 +91,9 @@ def load_board(text: str) -> tuple[Board, list[Clue]]:
 
     clues = _clues(section.get("Clues", []))
 
-    board = Board(size, grid, region_names, objects, people, groups, furniture, colours)
+    board = Board(
+        size, grid, region_names, objects, people, groups, furniture, colours, doors=doors
+    )
     board.region_ids(groups)  # fails now, not mid-solve, if a group names an unknown region
     board.hatched = board.region_ids(
         name for line in section.get("Hatched", []) for name in line.split()
@@ -111,6 +114,22 @@ def _placements(lines: list[str]) -> dict[str, list[Square]]:
         name, _, where = line.partition(":")
         placed.setdefault(name.strip(), []).extend(parse_square(t) for t in where.split())
     return placed
+
+
+def _door_placements(lines: list[str]) -> dict[str, list[tuple[Square, Square]]]:
+    """Read edges such as 'front: r2c3-r2c4 r5c1-r5c2'."""
+    doors: dict[str, list[tuple[Square, Square]]] = {}
+    for line in lines:
+        name, separator, positions = line.partition(":")
+        if not separator or not name.strip():
+            raise ValueError(f"bad door {line!r}, expected 'name: r1c1-r1c2'")
+        edges = doors.setdefault(name.strip(), [])
+        for token in positions.split():
+            first, edge, second = token.partition("-")
+            if not edge or not first or not second:
+                raise ValueError(f"bad door edge {token!r}, expected 'r1c1-r1c2'")
+            edges.append((parse_square(first), parse_square(second)))
+    return doors
 
 
 def _overlap(*layers: dict[str, list[Square]]) -> set[Square]:

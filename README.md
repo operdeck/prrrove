@@ -196,6 +196,7 @@ file cannot be read.
 | `futoshiki_5x5.txt` | `chains`: no givens, eight signs |
 | `murdoku_intro.txt` | `single` only: the 4×4 first case above |
 | `murdoku_house.txt` | `relations`, `subsumption`: a 5×5 using "not next to" and a counting clue |
+| `murdoku_sparse_mystery.txt` | `single`: a sparse 5×5 with role areas, furniture, a door edge, and one murderer |
 | `prrrdoku1.txt` | `relations`, `subsumption` |
 | `prrrdoku2.txt` | `what_if` |
 | `prrrdoku3.txt` | `what_if` |
@@ -241,7 +242,7 @@ square is only possible for Vladimir" says nothing at all.
 | Variable | a cell | a **person** | a cell | a cell |
 | Literal | cell holds digit | person stands on square | cell holds number | cell holds number |
 | `EXACTLY_ONE` | cell holds one digit | person stands somewhere | cell holds one number | cell holds one number |
-| | digit once per row / col / box (/ extra house) | one person per row; one per column | number once per row / col | number once per row / col |
+| | digit once per row / col / box (/ extra house) | at most one person per row and column; full boards occupy each line | number once per row / col | number once per row / col |
 | `AT_MOST_ONE` | — | square holds at most one person | — | — |
 | Relations | — | position, distance and region clues; see [Puzzle files](#puzzle-files) | one per cage: its arithmetic | one per sign: smaller < larger |
 
@@ -255,10 +256,10 @@ from one list of the puzzle's houses that the compiler, the brute force and
 the pictures all share.
 
 Murdoku's variables are people rather than squares because that is the shape
-of the rules: "exactly one figure per row" puts seven figures on a 7x7 board,
-it does not put all seven in every row. Modelling it the Sudoku way (squares
-choosing people) demands all seven people in each row and is unsatisfiable the
-moment an object blocks a square.
+of the rules: at most one figure per row and column; when the board has as
+many figures as rows, every row and column is occupied. Modelling it the Sudoku
+way (squares choosing people) demands all people in each row and is
+unsatisfiable the moment an object blocks a square.
 
 ## The rules
 
@@ -453,7 +454,9 @@ Hatched:        # optional; regions or groups drawn hatched in pictures
 Grid:           # region id per square, e.g. "a a b b c c c"
 Objects:        # name: square... — blocks those squares; names may repeat
 Furniture:      # optional; name: square... — can be stood on
-People:         # one per line, count must equal Size
+Doors:          # optional; name: edge... — door between adjacent cells, not a cell
+  gate: r4c5-r4c6
+People:         # one per line, from 1 through Size
 Rules:          # optional; clues that come with the board, not numbered
   outside Tim water
 Clues:          # numbered 1, 2, ... in the order given
@@ -461,13 +464,17 @@ Clues:          # numbered 1, 2, ... in the order given
   not_next_to Ben lamp               # beside none of them
   knight_from Tim klimwand boulder   # a knight's move from any of them
   on Jos bank                        # on a piece of furniture
+  not_on Clarence stoel              # not on any square in that furniture set
+  only_on Anna bed                   # Anna is on it; nobody else is
+  in_corner Henriette                # one of the four grid corners
   in_region Jos keukenwinkel         # any number of regions or groups
   outside Pip water                  # none of the given regions or groups
   same_region Anna Jos
   different_region Anna Pip
   apart Luna Mao                # different regions that do not share a side
   above Otto Tjitske 1          # exactly 1 row above; omit n for anywhere above
-  left_of Jos Otto
+  left_of Jos Otto                   # anywhere left of Otto
+  left_of Gideon Katharina 1         # exactly one column left
   within Tjitske Otto 4         # at most 4 orthogonal steps apart
   at_least Tim Pip 6            # at least 6 steps apart
   alone Luna                    # nobody else in Luna's region
@@ -478,17 +485,23 @@ Clues:          # numbered 1, 2, ... in the order given
 `alone` and `furthest` expand to one relation per other person; `furthest`
 is a three-way relation (Luna, Mao, that person).
 
+Role restrictions can reuse `Groups:` and `Rules:`. For example, group the
+noble areas and put nobles `in_region` and commoners `outside` that group;
+knights need no area restriction. A puzzle can omit knights entirely.
+
 `exactly n <clue> ; <clue> ...` counts simple clues (any of the one- and
 two-person clues above). Together they may name at most three people: the
 engine checks a relation by trying every combination of its people's
-squares, which grows quickly.
+squares, which grows quickly. `only_on` is a group restriction and cannot be
+nested inside `exactly`.
 
-There is no "two people next to each other" clue: with one person per row
-and column, two people never share a side, so it could never hold.
+There is no "two people next to each other" clue: with at most one person per
+row and column, two people never share a side, so it could never hold.
 
-`next_to` follows Murdoku's general rule that being next to something never
-crosses a region boundary. Distance (`within`, `at_least`, `furthest`),
-direction (`above`, `left_of`) and `knight_from` do cross regions.
+`next_to` normally stays in the same region. A named door is an edge between
+two regions; either cell on that edge counts as next to the door. Distance
+(`within`, `at_least`, `furthest`), direction (`above`, `left_of`) and
+`knight_from` may cross region boundaries.
 
 ### Worked solutions
 

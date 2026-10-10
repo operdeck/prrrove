@@ -122,7 +122,45 @@ def test_story_describes_by_region_and_row_before_squares():
     assert "Luna kan alleen in kolom 1, daar kan verder niemand" in story
 
 
-@pytest.mark.parametrize("name", ["murdoku_intro.txt", "murdoku_house.txt"])
+def test_new_murdoku_clues_have_dutch_wording():
+    square = murdoku.Square
+    board = murdoku.Board(
+        3,
+        [["a"] * 3 for _ in range(3)],
+        {"a": "zaal"},
+        {},
+        ["Anna", "Betsy", "Eli"],
+        furniture={"stoel": [square(0, 0)], "bed": [square(0, 1)]},
+    )
+    story = Story(board, [], Wording("nl", {"stoel": "de stoel", "bed": "het bed"}))
+    assert story._clue_text("not_on", ["Anna", "stoel"], ("Anna",)) == "Anna zit niet op de stoel"
+    assert story._clue_text("only_on", ["Anna", "bed"], ("Betsy",)) == "alleen Anna zit op het bed"
+    assert (
+        story._clue_text("in_corner", ["Eli"], ("Eli",)) == "Eli staat in een hoek van het raster"
+    )
+    assert story._clue_text("left_of", ["Anna", "Eli", "1"], ("Anna", "Eli")) == (
+        "Anna is precies één kolom links van Eli"
+    )
+
+
+def test_story_can_name_a_boundary_door():
+    square = murdoku.Square
+    board = murdoku.Board(
+        2,
+        [["west", "east"], ["west", "east"]],
+        {"west": "west", "east": "east"},
+        {},
+        ["Ada", "Ben"],
+        doors={"gate": [(square(0, 0), square(0, 1))]},
+    )
+    story = Story(board, [], Wording("nl", {"gate": "de deur"}))
+    assert story._clue_text("next_to", ["Ada", "gate"], ("Ada",)) == "Ada zit naast de deur"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["murdoku_intro.txt", "murdoku_house.txt", "murdoku_sparse_mystery.txt"],
+)
 def test_english_story_places_everyone_right_and_titles_name_them(name):
     text = (EXAMPLES / name).read_text()
     (solution,) = bruteforce.solutions(text)

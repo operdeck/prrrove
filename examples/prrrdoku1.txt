@@ -1,6 +1,6 @@
 # Prrrdoku 1 - "Wie krijgt Vladimir op schoot?"  (7x7, six regions)
 #
-# Board based on the figure in prrrdokus/Prrrdoku 1.docx, with r4c2 moved from
+# Board based on the figure in proprietary puzzles/Prrrdoku 1.docx, with r4c2 moved from
 # kampeerplek to speeltuin for the late-reveal variant. The verified checks are:
 # klimwand's neighbours are {r1c1, r2c2, r3c1}, keukenwinkel minus kookeiland
 # is the six Jos/Anna squares, and moestuin minus kas is the six Pip squares.

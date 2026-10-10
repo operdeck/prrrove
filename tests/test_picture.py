@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 PIL = pytest.importorskip("PIL")
-from PIL import Image  # noqa: E402
+from PIL import Image, ImageDraw  # noqa: E402
 
 from csp import bruteforce, icons, picture  # noqa: E402
 from csp.murdoku import Board, Square  # noqa: E402
@@ -34,6 +34,9 @@ def _centre(image, board, r, c, coordinates=True):
 def test_icon_names_map_to_code_points():
     assert icons.code_for("koffer") == icons.code_for("Suitcase") == "1f9f3"
     assert icons.code_for("boom2") == icons.code_for("boom") == "1f333"
+    assert icons.code_for("kruik") == "1f3fa"
+    assert icons.code_for("paard") == "1f40e"
+    assert icons.code_for("ton") == icons.code_for("barrel") == "1f6e2"
     assert icons.code_for("zeppelin") is None
     assert icons.NOTO_COMMIT in icons.SOURCE
 
@@ -63,6 +66,48 @@ def test_two_square_furniture_is_stretched_across_both_squares():
     row = margin + CELL + CELL // 2
     blue = [x for x in range(image.width) if image.getpixel((x, row)) == (0, 0, 255)]
     assert blue[0] < margin + CELL // 4 and blue[-1] > margin + 2 * CELL - CELL // 4
+
+
+def test_adjacent_chairs_render_as_separate_single_cell_icons(monkeypatch):
+    board = Board(
+        2, [["a", "a"], ["a", "a"]], {"a": "here"}, {}, ["A", "B"],
+        furniture={"stoel": [Square(0, 0), Square(1, 0)]},
+    )  # fmt: skip
+    calls = []
+
+    def capture(image, draw, name, area, cell, **kwargs):
+        calls.append((name, area, kwargs))
+
+    monkeypatch.setattr(picture, "_icon", capture)
+    picture.murdoku_picture(board, cell=CELL, coordinates=False)
+    assert len(calls) == 2
+    assert all(name == "stoel" and area[2] - area[0] == CELL for name, area, _ in calls)
+    assert all(area[3] - area[1] == CELL for _, area, _ in calls)
+
+
+def test_vertical_bed_icon_is_rotated(monkeypatch):
+    board = Board(
+        2, [["a", "a"], ["a", "a"]], {"a": "here"}, {}, ["A", "B"],
+        furniture={"bed": [Square(0, 0), Square(1, 0)]},
+    )  # fmt: skip
+    rotations = []
+
+    def capture(image, draw, name, area, cell, **kwargs):
+        rotations.append(kwargs.get("rotate", False))
+
+    monkeypatch.setattr(picture, "_icon", capture)
+    picture.murdoku_picture(board, cell=CELL, coordinates=False)
+    assert rotations == [True]
+
+
+def test_custom_carpet_and_well_icons_draw_distinct_images():
+    carpet = Image.new("RGB", (120, 120), picture.WHITE)
+    picture._draw_carpet(ImageDraw.Draw(carpet), (0, 0, 120, 120))
+    assert carpet.getpixel((60, 60)) == (156, 58, 45)
+
+    well = Image.new("RGB", (120, 120), picture.WHITE)
+    picture._draw_water_well(ImageDraw.Draw(well), (0, 0, 120, 120))
+    assert well.getpixel((45, 84)) == (45, 65, 70)
 
 
 def test_couch_icon_loses_its_floor_lamp():

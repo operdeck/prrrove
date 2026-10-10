@@ -1,0 +1,74 @@
+# Original compact Murdoku example: sparse board, noble areas, furniture,
+# objects, a boundary door, and a victim with one murderer in the same region.
+# The unique assignment and victim's sole region-companion are checked in tests/test_solver.py.
+
+Size: 5
+Words:
+maras_house: in Mara's house
+blue_hall: in the Blue Hall
+garden: in the garden
+study: in the study
+well_court: in the well court
+stable: in the stable
+noble_areas: in the noble areas
+bed: the bed
+chair: the chair
+carpet: the carpet
+horse: the horse
+well: the well
+gate: the gate
+
+Regions:
+a: maras_house #D8D2F0
+b: blue_hall #DCDCDC
+c: garden #CBE6B9
+d: study #FADFB5
+e: well_court #C4DCF2
+f: stable #BEE5D6
+
+Groups:
+noble_areas: maras_house blue_hall
+
+Grid:
+a a b b b
+a a b b c
+d d c c c
+d e e f f
+d e e f f
+
+Objects:
+well: r4c2 r4c3 r5c2 r5c3
+table: r3c4
+
+Furniture:
+bed: r1c1 r1c2
+chair: r2c3 r2c4
+carpet: r4c4 r4c5
+horse: r5c4 r5c5
+
+Doors:
+gate: r1c2-r1c3
+
+People:
+Mara
+Nico
+Ria
+Tomas
+
+# Mara and Nico are nobles. Ria and Tomas are commoners; no knights here.
+Rules:
+in_region Mara noble_areas
+in_region Nico noble_areas
+outside Ria noble_areas
+outside Tomas noble_areas
+
+# Tomas is the victim. Exactly one of Mara or Ria shares his region; who did it?
+Clues:
+only_on Mara bed
+next_to Mara gate
+on Nico chair
+left_of Nico Ria 1
+only_on Ria carpet
+in_corner Tomas
+on Tomas horse
+exactly 1 same_region Tomas Mara ; same_region Tomas Ria

@@ -1,6 +1,6 @@
 # Prrrdoku 3 - "Een dagje Amsterdam"  (9x9, eight regions)
 #
-# Board based on the figure in prrrdokus/Prrrdoku 3.docx. For the late-reveal
+# Board based on the figure in proprietary puzzles/Prrrdoku 3.docx. For the late-reveal
 # variant, r2c5 moves to Helmholtzstraat, and r1c6/r2c6 move to Klimgebied Noord
 # so Bankastraat remains connected. Colours match the document's legend table.
 # Cross-checked against the solution's candidate lists:

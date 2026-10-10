@@ -80,10 +80,10 @@ The repo is **public** (`origin` = `github.com/operdeck/prrrove`).
   of these must pass: `uvx ruff check src tests benchmark`, `uvx ruff format --check
   src tests benchmark`, `uv run mypy src`, `uv run pytest -q`. CI runs the same
   on every push to `main` (`.github/workflows/tests.yml`).
-- **`prrrdokus/` never leaves this machine.** It holds the private source
+- **`proprietary puzzles/` never leaves this machine.** It holds the private source
   documents; it is gitignored and was removed from all history. Stage files
   by explicit path, never `git add -A`. Before every push, this must print
-  `0`: `git rev-list --objects --all | grep -ciE '\.(docx|pdf)$|prrrdokus/'`.
+  `0`: `git rev-list --objects --all | grep -ciE '\.(docx|pdf)$|proprietary puzzles/'`.
 - **Push as `operdeck`, without prompts:** `GIT_TERMINAL_PROMPT=0 git push
   origin main`. The repo's local git config gets the token from
   `gh auth token --user operdeck`; do not switch the global `gh` account, and
@@ -145,9 +145,9 @@ than listing it as working.
 
 1. New module with `compile_puzzle(...) -> Model`.
 2. Pick the variables carefully — **this is where the real design work is.**
-   Ask what the puzzle's constraints quantify over. Murdoku's "one figure per
-   row" is about people, so people are the variables; copying Sudoku's
-   cell-centric shape produced an unsatisfiable model.
+  Ask what the puzzle's constraints quantify over. Murdoku's "at most one
+  figure per row and column" is about people, so people are the variables;
+  copying Sudoku's cell-centric shape produced an unsatisfiable model.
 3. Express every rule as `EXACTLY_ONE` / `AT_MOST_ONE` sets, plus relations
    (over two or more variables) for clues that link people.
 4. A `render(..., title, steps) -> str` function. `steps` are the deductions
@@ -189,6 +189,7 @@ Numbers from actual runs, not estimates:
 | `futoshiki_5x5.txt` | solved, 49 iterations | `single` 25, `relations` 12, `chains` 8, `cover2` 3 |
 | `murdoku_intro.txt` | solved, 5 iterations | `single` 4 |
 | `murdoku_house.txt` | solved, 11 iterations | `single` 5, `relations` 4, `subsumption` 1 |
+| `murdoku_sparse_mystery.txt` | solved, 5 iterations | `single` 4 |
 | `prrrdoku1.txt` | solved, 14 iterations | `single` 7, `relations` 4, `subsumption` 2 |
 | `prrrdoku2.txt` | solved, 27 iterations | `single` 9, `relations` 14, `chains` 2, `what_if` 1 |
 | `prrrdoku3.txt` | solved, 40 iterations | `single` 9, `relations` 18, `subsumption` 5, `cover2` 2, `what_if` 5 |
@@ -227,7 +228,7 @@ no weak links yet.
 
 ## Known gaps
 
-- The Prrrdoku documents are in `prrrdokus/`, one per puzzle. Their boards
+- The Prrrdoku documents are in `proprietary puzzles/`, one per puzzle. Their boards
   are **images**: extract from `word/media/*.png` and read them; the tables
   are colour legends, useful for matching colours to region names (read
   `w:fill`). Always cross-check a transcription against the candidate lists
